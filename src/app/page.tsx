@@ -1,22 +1,23 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TimeLogTable } from '@/components/TimeLogTable';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { Clock, LogIn, LogOut, FileDown, Brain } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine } from 'lucide-react';
 
 export default function Home() {
   const [name, setName] = useState<string>('');
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
+  const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
 
-  // Load logs from localStorage on initial render
   useEffect(() => {
     const storedLogs = localStorage.getItem('timeLogs');
     if (storedLogs) {
@@ -30,19 +31,27 @@ export default function Home() {
         setTimeLogs(parsedLogs);
       } catch (error) {
         console.error("Failed to parse logs from localStorage", error);
-        localStorage.removeItem('timeLogs'); // Clear corrupted data
+        localStorage.removeItem('timeLogs'); 
       }
     }
   }, []);
 
-  // Save logs to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('timeLogs', JSON.stringify(timeLogs));
   }, [timeLogs]);
 
+  useEffect(() => {
+    setCurrentDateTime(format(new Date(), 'MM/dd/yyyy - hh:mm:ss a'));
+    const timer = setInterval(() => {
+      setCurrentDateTime(format(new Date(), 'MM/dd/yyyy - hh:mm:ss a'));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const isCurrentUserClockedIn = useMemo(() => {
     if (!name) return false;
-    return timeLogs.some(log => log.name === name && log.clockOut === null && log.date === format(new Date(), 'yyyy-MM-dd'));
+    const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+    return timeLogs.some(log => log.name === name && log.clockOut === null && log.date === todayDateStr);
   }, [name, timeLogs]);
 
   const handleClockIn = () => {
@@ -51,7 +60,7 @@ export default function Home() {
       return;
     }
     if (isCurrentUserClockedIn) {
-      toast({ title: 'Error', description: `${name} is already clocked in.`, variant: 'destructive' });
+      toast({ title: 'Error', description: `${name} is already clocked in for today.`, variant: 'destructive' });
       return;
     }
 
@@ -63,7 +72,6 @@ export default function Home() {
       date: format(new Date(), 'yyyy-MM-dd'),
     };
     setTimeLogs(prevLogs => [...prevLogs, newLog]);
-    toast({ title: 'Success', description: `Clocked in as ${name.trim()} at ${format(newLog.clockIn, 'hh:mm:ss a')}.` });
   };
 
   const handleClockOut = () => {
@@ -72,151 +80,93 @@ export default function Home() {
       return;
     }
     if (!isCurrentUserClockedIn) {
-      toast({ title: 'Error', description: `${name} is not clocked in.`, variant: 'destructive' });
+      toast({ title: 'Error', description: `${name} is not clocked in for today.`, variant: 'destructive' });
       return;
     }
 
     setTimeLogs(prevLogs => {
       const newLogs = [...prevLogs];
+      const todayDateStr = format(new Date(), 'yyyy-MM-dd');
       const logIndex = newLogs.findLastIndex(
-        (log) => log.name === name.trim() && log.clockOut === null && log.date === format(new Date(), 'yyyy-MM-dd')
+        (log) => log.name === name.trim() && log.clockOut === null && log.date === todayDateStr
       );
 
       if (logIndex !== -1) {
         newLogs[logIndex] = { ...newLogs[logIndex], clockOut: new Date() };
-        toast({ title: 'Success', description: `Clocked out ${name.trim()} at ${format(newLogs[logIndex].clockOut!, 'hh:mm:ss a')}.` });
         return newLogs;
       }
-      // Should not happen if isCurrentUserClockedIn is true, but as a fallback:
-      toast({ title: 'Error', description: 'Could not find active clock-in record.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Could not find active clock-in record for today.', variant: 'destructive' });
       return prevLogs;
     });
   };
 
-  const handleExportToCSV = () => {
-    if (todayLogs.length === 0) {
-      toast({ title: 'Info', description: 'No logs to export for today.' });
-      return;
-    }
-
-    const headers = ['Name', 'Date', 'Clock In Time', 'Clock Out Time', 'Duration (HH:mm:ss)'];
-    const rows = todayLogs.map(log => [
-      log.name,
-      format(new Date(log.date), 'MM/dd/yyyy'),
-      format(log.clockIn, 'hh:mm:ss a'),
-      log.clockOut ? format(log.clockOut, 'hh:mm:ss a') : 'N/A',
-      log.clockOut ? formatDuration(log.clockIn.getTime(), log.clockOut.getTime()) : 'In Progress'
-    ]);
-
-    let csvContent = "data:text/csv;charset=utf-8,"
-      + headers.join(",") + "\n"
-      + rows.map(e => e.join(",")).join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `timesheet_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast({ title: 'Success', description: 'Timesheet exported to CSV.' });
-  };
-  
-  function formatDuration(startTimeMs: number, endTimeMs: number | null): string {
-    if (!endTimeMs) return 'In Progress';
-    const durationMs = endTimeMs - startTimeMs;
-    if (durationMs < 0) return 'Invalid';
-
-    const totalSeconds = Math.floor(durationMs / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  }
-
-
-  const todayLogs = useMemo(() => {
-    const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-    return timeLogs.filter(log => log.date === todayDateStr).sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
-  }, [timeLogs]);
-
   return (
-    <main className="min-h-screen bg-gradient-to-br from-background to-secondary/30 flex flex-col items-center justify-center p-4 selection:bg-primary/20 selection:text-primary">
-      <Card className="w-full max-w-2xl shadow-2xl">
-        <CardHeader className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Brain className="h-10 w-10 text-primary" />
-            <CardTitle className="text-4xl font-headline">Big Brainbox Time Clock</CardTitle>
+    <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center justify-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
+      <div className="text-center space-y-4 w-full max-w-2xl">
+        <Image 
+          src="https://placehold.co/100x100.png" 
+          data-ai-hint="logo brain" 
+          alt="Big Brainbox Logo" 
+          width={100} 
+          height={100} 
+          className="mx-auto rounded-full shadow-lg"
+        />
+        <h1 className="text-4xl sm:text-5xl font-bold">
+          <span className="text-primary">Big Brainbox Time</span> <span className="text-accent">Clock</span>
+        </h1>
+        <p className="text-lg sm:text-xl text-muted-foreground">
+          Professional time tracking with cloud sync
+        </p>
+        {currentDateTime && (
+          <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--accent))] text-primary-foreground font-semibold text-md sm:text-lg">
+            <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6" />
+            <span>{currentDateTime}</span>
           </div>
-          <CardDescription className="text-lg">
-            Track your work hours with creativity and energy!
-          </CardDescription>
+        )}
+      </div>
+
+      <Card className="w-full max-w-md shadow-xl rounded-xl">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl font-semibold">
+            <User className="h-6 w-6 text-primary" />
+            Time Tracking Controls
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-8">
-          <div className="space-y-2">
-            <Label htmlFor="name" className="text-base">Your Name</Label>
+        <CardContent className="space-y-6">
+          <div>
+            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Employee Name</Label>
             <Input
               id="name"
               type="text"
-              placeholder="Enter your name (e.g., Albert Einstein)"
+              placeholder="Enter your full name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="text-base py-6"
-              aria-describedby="name-description"
+              className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary"
             />
-            <p id="name-description" className="text-sm text-muted-foreground">
-              {isCurrentUserClockedIn ? `${name} is currently clocked IN.` : 'Enter your name to clock in or out.'}
-            </p>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          
+          <div className="grid grid-cols-2 gap-4">
             <Button
               onClick={handleClockIn}
               disabled={!name.trim() || isCurrentUserClockedIn}
               size="lg"
-              className="w-full text-base py-6"
+              className="bg-green-500 hover:bg-green-600 text-white text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out"
               aria-label="Clock In"
             >
-              <LogIn className="mr-2 h-5 w-5" /> Clock In
+              <ArrowRightToLine className="mr-2 h-5 w-5" /> Clock In
             </Button>
             <Button
               onClick={handleClockOut}
               disabled={!name.trim() || !isCurrentUserClockedIn}
-              variant="outline"
               size="lg"
-              className="w-full text-base py-6 border-primary text-primary hover:bg-primary/10"
+              className="bg-pink-500 hover:bg-pink-600 text-white text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out"
               aria-label="Clock Out"
             >
-              <LogOut className="mr-2 h-5 w-5" /> Clock Out
-            </Button>
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="text-2xl font-semibold flex items-center gap-2">
-              <Clock className="h-6 w-6 text-primary" />
-              Today's Time Logs
-            </h3>
-            <TimeLogTable logs={todayLogs} />
-          </div>
-
-          <div className="text-center">
-            <Button
-              onClick={handleExportToCSV}
-              disabled={todayLogs.length === 0}
-              variant="secondary"
-              size="lg"
-              className="text-base py-6"
-              aria-label="Export Today's Timesheet to CSV"
-            >
-              <FileDown className="mr-2 h-5 w-5" /> Export Today's Timesheet (CSV)
+              <ArrowLeftToLine className="mr-2 h-5 w-5" /> Clock Out
             </Button>
           </div>
         </CardContent>
       </Card>
-      <footer className="mt-8 text-center text-muted-foreground text-sm">
-        <p>&copy; {new Date().getFullYear()} Big Brainbox Time Clock. Keep track, stay sharp!</p>
-      </footer>
     </main>
   );
 }
