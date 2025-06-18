@@ -14,6 +14,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { useState, useEffect } from 'react';
 
 interface TimeLogTableProps {
   logs: TimeLogEntry[];
@@ -21,7 +22,7 @@ interface TimeLogTableProps {
 
 function formatDuration(startTime: Date, endTime: Date | null): string {
   if (!endTime) {
-    return '--'; // Duration is not applicable if not clocked out
+    return '--';
   }
   const durationMs = endTime.getTime() - startTime.getTime();
   if (durationMs < 0) return 'Invalid';
@@ -34,16 +35,26 @@ function formatDuration(startTime: Date, endTime: Date | null): string {
 }
 
 export function TimeLogTable({ logs }: TimeLogTableProps) {
-  const todayDateFormatted = format(new Date(), 'M/d/yyyy');
+  const [todayDateFormatted, setTodayDateFormatted] = useState<string | null>(null);
   const entryCount = logs.length;
+
+  useEffect(() => {
+    setTodayDateFormatted(format(new Date(), 'M/d/yyyy'));
+  }, []);
 
   return (
     <div className="w-full">
       <div className="mb-4">
         <h2 className="text-xl sm:text-2xl font-semibold">Today's Time Entries</h2>
-        <p className="text-sm text-muted-foreground">
-          {entryCount} {entryCount === 1 ? "entry" : "entries"} for {todayDateFormatted}
-        </p>
+        {todayDateFormatted ? (
+          <p className="text-sm text-muted-foreground">
+            {entryCount} {entryCount === 1 ? "entry" : "entries"} for {todayDateFormatted}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {entryCount} {entryCount === 1 ? "entry" : "entries"} for ...
+          </p>
+        )}
       </div>
       {logs.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No time logs for today yet.</p>
