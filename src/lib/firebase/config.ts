@@ -3,7 +3,7 @@
 // See: https://firebase.google.com/docs/web/setup#available-libraries
 
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { getAuth, type Auth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore"; 
 
 const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -49,28 +49,37 @@ const firebaseConfig = {
   // measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Optional
 };
 
-let app: FirebaseApp | undefined;
-let authInstance: Auth | undefined;
-let dbInstance: Firestore | undefined;
+let app: FirebaseApp | undefined = undefined;
+let authInstance: Auth | undefined = undefined;
+let dbInstance: Firestore | undefined = undefined;
 
 if (!crucialEnvVarsMissing) {
   if (!getApps().length) {
     try {
       app = initializeApp(firebaseConfig);
+      console.log("Firebase app initialized successfully.");
     } catch (error) {
       console.error("Firebase initialization error:", error);
       crucialEnvVarsMissing = true; 
     }
   } else {
     app = getApp();
+    console.log("Existing Firebase app retrieved.");
   }
 
   if (app) {
     try {
       authInstance = getAuth(app);
-      dbInstance = getFirestore(app); 
+      console.log("Firebase Auth instance retrieved successfully.");
     } catch (error) {
-        console.error("Firebase getAuth() or getFirestore() error:", error);
+        console.error("Firebase getAuth() error:", error);
+        crucialEnvVarsMissing = true; 
+    }
+    try {
+      dbInstance = getFirestore(app); 
+      console.log("Firebase Firestore instance retrieved successfully.");
+    } catch (error) {
+        console.error("Firebase getFirestore() error:", error);
         crucialEnvVarsMissing = true; 
     }
   } else if (!crucialEnvVarsMissing) { 
@@ -79,12 +88,15 @@ if (!crucialEnvVarsMissing) {
   }
 }
 
-if (crucialEnvVarsMissing && typeof window !== 'undefined' && !authInstance) {
-  const errorMessage = "Firebase is not configured correctly due to missing crucial environment variables (check console for specifics). Authentication and other Firebase features will not work. Please ensure your .env.local file is correctly set up and you have restarted your development server.";
+if (crucialEnvVarsMissing) {
+  const errorMessage = "Firebase is not configured correctly due to missing crucial environment variables or initialization errors (check console for specifics). Authentication and Firestore features will not work. Please ensure your .env.local file is correctly set up with ALL required NEXT_PUBLIC_ variables and you have restarted your development server.";
   console.error(errorMessage);
-} else if (crucialEnvVarsMissing && !authInstance) {
-    console.error("Firebase initialization was skipped or failed due to missing crucial environment variables or other errors (check server console for specifics). Auth and Firestore features will not work.");
+  if (typeof window !== 'undefined' && (!authInstance || !dbInstance)) {
+    // Optionally, display an error to the user in the UI, though console is primary for dev
+  }
+} else {
+   console.log("Firebase config loaded. Auth and Firestore should be available.");
 }
 
 
-export { app, authInstance as auth, dbInstance as db };
+export { app, authInstance as auth, dbInstance as db, GoogleAuthProvider };
