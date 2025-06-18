@@ -96,8 +96,6 @@ export default function Home() {
         newLogs[logIndex] = { ...newLogs[logIndex], clockOut: new Date() };
         return newLogs;
       }
-      // This case should ideally not be reached if isCurrentUserClockedIn is accurate
-      // but as a safeguard:
       toast({ title: 'Error', description: 'Could not find active clock-in record for today.', variant: 'destructive' });
       return prevLogs;
     });
@@ -107,8 +105,7 @@ export default function Home() {
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center justify-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       <div className="text-center space-y-4 w-full max-w-2xl">
         <Image 
-          src="https://placehold.co/100x100.png" 
-          data-ai-hint="logo brain" 
+          src="/logo.png"
           alt="Big Brainbox Logo" 
           width={100} 
           height={100} 
