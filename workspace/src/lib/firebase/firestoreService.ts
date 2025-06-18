@@ -15,7 +15,7 @@ const generateInviteCode = (length: number = 8): string => {
   return result;
 };
 
-export const createUserDocument = async (user: FirebaseUser): Promise<void> => {
+export const createUserDocument = async (user: FirebaseUser, displayName?: string): Promise<void> => {
   if (!db) {
     console.error("Firestore (db) is not initialized in createUserDocument. Check Firebase configuration.");
     throw new Error("Firestore (db) is not initialized. Check Firebase configuration.");
@@ -38,17 +38,38 @@ export const createUserDocument = async (user: FirebaseUser): Promise<void> => {
       const userProfile: UserProfile = {
         uid: user.uid,
         email: user.email,
-        displayName: user.displayName || user.email?.split('@')[0] || 'Anonymous User',
+        displayName: displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous User',
         organizationId: null,
         role: null,
         createdAt: new Date(), 
       };
       try {
         await setDoc(userRef, userProfile);
-        console.log(`[firestoreService] Successfully created document at path: ${userPath}`);
+        console.log(`[firestoreService] Successfully created document at path: ${userPath} with displayName: ${userProfile.displayName}`);
       } catch (setError) {
         console.error(`[firestoreService] Firestore error during setDoc at path: ${userPath}`, setError);
         throw setError;
+      }
+    } else {
+      // If user doc exists, but displayName from param is provided (e.g. Google Sign In updates name)
+      // or if Firestore displayName is placeholder and Firebase Auth has a better one.
+      const existingProfile = userDoc.data() as UserProfile;
+      let newDisplayName = existingProfile.displayName;
+      if (displayName && displayName !== existingProfile.displayName) {
+        newDisplayName = displayName;
+      } else if (!existingProfile.displayName || existingProfile.displayName.includes('@')) { 
+        // If current displayName is placeholder or email-based, try to update from Firebase Auth
+        if (user.displayName && user.displayName !== existingProfile.displayName) {
+          newDisplayName = user.displayName;
+        }
+      }
+      if (newDisplayName !== existingProfile.displayName) {
+        try {
+          await updateDoc(userRef, { displayName: newDisplayName });
+          console.log(`[firestoreService] Successfully updated displayName at path: ${userPath} to ${newDisplayName}`);
+        } catch (updateError) {
+          console.error(`[firestoreService] Firestore error during displayName updateDoc at path: ${userPath}`, updateError);
+        }
       }
     }
   } catch (getError) {
@@ -176,9 +197,6 @@ export const joinOrganizationWithInviteCode = async (
       throw updateUserError;
     }
     
-
-    // const currentMemberUids = organizationData.memberUids || [];
-    // if (!currentMemberUids.includes(userId)) {
     const orgDocRefToUpdate = doc(db, 'organizations', organizationId);
     console.log(`[firestoreService] Attempting to update document at path: organizations/${organizationId} (adding memberUid)`);
     try {
@@ -190,7 +208,6 @@ export const joinOrganizationWithInviteCode = async (
       console.error(`[firestoreService] Firestore error during updateDoc (organization members) at path: organizations/${organizationId}`, updateOrgError);
       throw updateOrgError;
     }
-    // }
 
     return {
       id: organizationId,
@@ -207,7 +224,7 @@ export const joinOrganizationWithInviteCode = async (
 
 export const getUserOrganizationDetails = async (
   userId: string
-): Promise<{ organization: Organization; userRole: UserProfile['role'] } | null> => {
+): Promise<{ organization: Organization; userRole: UserProfile['role']; userDisplayName: string } | null> => {
   if (!db) {
     console.error("Firestore (db) is not initialized for getUserOrganizationDetails.");
     throw new Error("Firestore (db) is not initialized.");
@@ -233,7 +250,8 @@ export const getUserOrganizationDetails = async (
       const currentFirebaseUser = auth.currentUser;
       if (currentFirebaseUser && currentFirebaseUser.uid === userId) {
         try {
-          await createUserDocument(currentFirebaseUser); 
+          // Pass currentFirebaseUser.displayName to ensure it's captured if available
+          await createUserDocument(currentFirebaseUser, currentFirebaseUser.displayName || undefined); 
           userDoc = await getDoc(userRef); 
           console.log(`[firestoreService] Re-checked user document at path: ${userPath} after creation attempt. Exists: ${userDoc.exists()}`);
           if (!userDoc.exists()) {
@@ -251,10 +269,12 @@ export const getUserOrganizationDetails = async (
     }
     
     const userProfile = userDoc.data() as UserProfile;
+     const userDisplayName = userProfile.displayName || userProfile.email?.split('@')[0] || 'User';
+
 
     if (!userProfile.organizationId) {
       console.log(`[firestoreService] User ${userId} is not part of an organization.`);
-      return null;
+      return { organization: null as any, userRole: null, userDisplayName }; // Return display name even if no org
     }
 
     const orgPath = `organizations/${userProfile.organizationId}`;
@@ -266,9 +286,7 @@ export const getUserOrganizationDetails = async (
 
       if (!orgDoc.exists()) {
         console.warn(`[firestoreService] Organization document not found for ID: ${userProfile.organizationId} at path ${orgPath}. This might indicate data inconsistency.`);
-        // Optionally, clear user's orgId if the org doc is missing
-        // await updateDoc(userRef, { organizationId: null, role: null });
-        return null;
+        return { organization: null as any, userRole: userProfile.role, userDisplayName }; // Return display name and role
       }
 
       const orgData = orgDoc.data() as Omit<Organization, 'id' | 'createdAt'> & { createdAt: Timestamp };
@@ -282,13 +300,15 @@ export const getUserOrganizationDetails = async (
           createdAt: orgData.createdAt.toDate(),
         },
         userRole: userProfile.role,
+        userDisplayName: userDisplayName,
       };
     } catch (getOrgError) {
       console.error(`[firestoreService] Firestore error during getDoc for organization at path: ${orgPath}`, getOrgError);
       if (getOrgError instanceof Error && (getOrgError.message.includes("firestore/permission-denied") || getOrgError.message.includes("firestore/permission-denied") || getOrgError.message.includes("Missing or insufficient permissions"))) {
         console.error("[firestoreService] Firestore permission denied when fetching organization. Check your Firestore security rules in the Firebase console.");
       }
-      throw getOrgError;
+      // Still return user display name and role if org fetch fails
+      return { organization: null as any, userRole: userProfile.role, userDisplayName };
     }
   } catch (getUserError) {
     console.error(`[firestoreService] Firestore error during getDoc for user at path: ${userPath} (for org details)`, getUserError);
@@ -298,6 +318,7 @@ export const getUserOrganizationDetails = async (
     throw getUserError; 
   }
 };
+
 
 export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
   if (!db) {
@@ -314,7 +335,15 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
   try {
     const userDoc = await getDoc(userRef);
     console.log(`[firestoreService] Successfully got user profile at path: ${userPath}. Exists: ${userDoc.exists()}`);
-    return userDoc.exists() ? userDoc.data() as UserProfile : null;
+    if (!userDoc.exists()) return null;
+    
+    const profile = userDoc.data() as UserProfile;
+    // Ensure displayName is sensible if somehow missing
+    if (!profile.displayName) {
+        profile.displayName = profile.email?.split('@')[0] || 'User';
+    }
+    return profile;
+
   } catch (error) {
     console.error(`[firestoreService] Firestore error during getDoc for user profile at path: ${userPath}`, error);
     throw error;

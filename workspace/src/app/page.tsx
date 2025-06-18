@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { createOrganizationWithInviteCode, joinOrganizationWithInviteCode, getUserOrganizationDetails } from '@/lib/firebase/firestoreService';
+import { createOrganizationWithInviteCode, joinOrganizationWithInviteCode, getUserOrganizationDetails, getUserProfile } from '@/lib/firebase/firestoreService';
 import type { Organization } from '@/interfaces/Organization';
 import type { UserProfile } from '@/interfaces/User';
 
@@ -90,7 +90,7 @@ function CreateOrganizationForm({
           {isCreating ? 'Creating...' : 'Create Organization'}
         </Button>
         <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isCreating}>
-          Go back to your organizations
+          Go back to organization options
         </Button>
       </div>
     </form>
@@ -151,7 +151,7 @@ function JoinOrganizationForm({
           {isJoining ? 'Joining...' : 'Join Organization'}
         </Button>
         <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isJoining}>
-          Go back to your organizations
+          Go back to organization options
         </Button>
       </div>
     </form>
@@ -163,7 +163,7 @@ export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
 
-  const [name, setName] = useState<string>(''); 
+  const [currentUserName, setCurrentUserName] = useState<string>(''); // For clock-in, from user profile
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
@@ -177,8 +177,7 @@ export default function Home() {
   const [showCreateOrgForm, setShowCreateOrgForm] = useState(false);
   const [showJoinOrgForm, setShowJoinOrgForm] = useState(false);
   
-  const [showInviteCodeCreatedCard, setShowInviteCodeCreatedCard] = useState(false);
-
+  const [showInviteCodeCreatedCard, setShowInviteCodeCreatedCard] = useState(false); // To show "Org Created!" message
 
   useEffect(() => {
     if (authLoading) {
@@ -192,12 +191,17 @@ export default function Home() {
 
     setOrganizationStatus('loading');
     getUserOrganizationDetails(user.uid)
-      .then(orgData => {
-        if (orgData) {
-          setOrganizationDetails(orgData.organization);
-          setUserRole(orgData.userRole);
+      .then(orgAndUserData => {
+        if (orgAndUserData?.organization) {
+          setOrganizationDetails(orgAndUserData.organization);
+          setUserRole(orgAndUserData.userRole);
+          setCurrentUserName(orgAndUserData.userDisplayName || user.email?.split('@')[0] || 'User');
           setOrganizationStatus('member');
         } else {
+           // User might exist but not be in an org, or orgData is null due to an issue
+          getUserProfile(user.uid).then(profile => {
+            setCurrentUserName(profile?.displayName || user.email?.split('@')[0] || 'User');
+          });
           setOrganizationStatus('needsSetup');
           setShowCreateOrgForm(false); 
           setShowJoinOrgForm(false);
@@ -205,7 +209,7 @@ export default function Home() {
       })
       .catch(error => {
         console.error("Error fetching organization details:", error);
-        toast({ title: 'Error', description: 'Could not fetch organization details. Please try refreshing.', variant: 'destructive'});
+        toast({ title: 'Error', description: 'Could not fetch organization or user details. Please try refreshing.', variant: 'destructive'});
         setOrganizationStatus('needsSetup'); 
       });
 
@@ -228,7 +232,7 @@ export default function Home() {
           localStorage.removeItem('timeLogs');
         }
       }
-      setName(user.displayName || user.email || '');
+      // currentUserName is set in the above useEffect
     }
   }, [user, organizationStatus]);
 
@@ -248,24 +252,24 @@ export default function Home() {
   }, []);
 
   const isCurrentUserClockedIn = useMemo(() => {
-    if (!name || organizationStatus !== 'member') return false;
+    if (!currentUserName || organizationStatus !== 'member') return false;
     const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-    return timeLogs.some(log => log.name === name && log.clockOut === null && log.date === todayDateStr);
-  }, [name, timeLogs, organizationStatus]);
+    return timeLogs.some(log => log.name === currentUserName && log.clockOut === null && log.date === todayDateStr);
+  }, [currentUserName, timeLogs, organizationStatus]);
 
   const handleClockIn = () => {
-    if (!name.trim()) {
-      toast({ title: 'Error', description: 'Please enter your name.', variant: 'destructive' });
+    if (!currentUserName.trim()) {
+      toast({ title: 'Error', description: 'Your name is not set for clocking in.', variant: 'destructive' });
       return;
     }
     if (isCurrentUserClockedIn) {
-      toast({ title: 'Error', description: `${name} is already clocked in for today.`, variant: 'destructive' });
+      toast({ title: 'Error', description: `${currentUserName} is already clocked in for today.`, variant: 'destructive' });
       return;
     }
 
     const newLog: TimeLogEntry = {
       id: crypto.randomUUID(),
-      name: name.trim(),
+      name: currentUserName.trim(),
       clockIn: new Date(),
       clockOut: null,
       date: format(new Date(), 'yyyy-MM-dd'),
@@ -274,12 +278,12 @@ export default function Home() {
   };
 
   const handleClockOut = () => {
-    if (!name.trim()) {
-      toast({ title: 'Error', description: 'Please enter your name to clock out.', variant: 'destructive' });
+    if (!currentUserName.trim()) {
+      toast({ title: 'Error', description: 'Your name is not set for clocking out.', variant: 'destructive' });
       return;
     }
     if (!isCurrentUserClockedIn) {
-      toast({ title: 'Error', description: `${name} is not clocked in for today.`, variant: 'destructive' });
+      toast({ title: 'Error', description: `${currentUserName} is not clocked in for today.`, variant: 'destructive' });
       return;
     }
 
@@ -287,7 +291,7 @@ export default function Home() {
       const newLogs = [...prevLogs];
       const todayDateStr = format(new Date(), 'yyyy-MM-dd');
       const logIndex = newLogs.findLastIndex(
-        (log) => log.name === name.trim() && log.clockOut === null && log.date === todayDateStr
+        (log) => log.name === currentUserName.trim() && log.clockOut === null && log.date === todayDateStr
       );
 
       if (logIndex !== -1) {
@@ -302,15 +306,22 @@ export default function Home() {
   const todayLogs = useMemo(() => {
     if (organizationStatus !== 'member') return [];
     const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-    return timeLogs
-      .filter(log => log.date === todayDateStr)
-      .sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
-  }, [timeLogs, organizationStatus]);
+    let logs = timeLogs.filter(log => log.date === todayDateStr);
+
+    if (userRole === 'member' && currentUserName) {
+      logs = logs.filter(log => log.name === currentUserName);
+    }
+    
+    return logs.sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
+  }, [timeLogs, organizationStatus, userRole, currentUserName]);
 
   const uniqueEmployeeNamesForExport = useMemo(() => {
-    const names = new Set(todayLogs.map(log => log.name));
+    if (userRole === 'member' && currentUserName) {
+        return [currentUserName];
+    }
+    const names = new Set(todayLogs.map(log => log.name)); // todayLogs is already filtered for members
     return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [todayLogs]);
+  }, [todayLogs, userRole, currentUserName]);
 
 
   const formatDurationForExport = (startTime: Date, endTime: Date | null): string => {
@@ -327,20 +338,26 @@ export default function Home() {
   };
 
   const handleExport = () => {
-    let logsToProcess = todayLogs;
+    let logsToProcess = todayLogs; // Already filtered for members if applicable
     let fileNamePart = "All_Employees";
 
-    if (selectedExportOption !== ALL_EMPLOYEES_OPTION) {
-      logsToProcess = todayLogs.filter(log => log.name === selectedExportOption);
-      fileNamePart = selectedExportOption.replace(/\s+/g, '_');
-    } else {
-      logsToProcess = [...todayLogs].sort((a, b) => a.name.localeCompare(b.name));
+    if (userRole === 'member' && currentUserName) {
+        logsToProcess = todayLogs.filter(log => log.name === currentUserName); // Double ensure
+        fileNamePart = currentUserName.replace(/\s+/g, '_');
+    } else if (userRole === 'owner' && selectedExportOption !== ALL_EMPLOYEES_OPTION) {
+        logsToProcess = todayLogs.filter(log => log.name === selectedExportOption);
+        fileNamePart = selectedExportOption.replace(/\s+/g, '_');
+    } else if (userRole === 'owner') { // Owner exporting all
+        logsToProcess = [...todayLogs].sort((a, b) => a.name.localeCompare(b.name));
     }
 
+
     if (logsToProcess.length === 0) {
+      const forWhom = userRole === 'member' ? currentUserName : 
+                      (selectedExportOption === ALL_EMPLOYEES_OPTION ? 'today' : selectedExportOption);
       toast({
         title: "No Data",
-        description: `There are no time entries for ${selectedExportOption === ALL_EMPLOYEES_OPTION ? 'today' : selectedExportOption} to export.`,
+        description: `There are no time entries for ${forWhom} to export.`,
         variant: "destructive",
       });
       return;
@@ -361,19 +378,26 @@ export default function Home() {
     const todayDateFileName = format(new Date(), 'yyyy-MM-dd');
     XLSX.writeFile(workbook, `TimeLogs_${fileNamePart}_${todayDateFileName}.xlsx`);
     
+    const exportedForWhom = userRole === 'member' ? currentUserName : 
+                           (selectedExportOption === ALL_EMPLOYEES_OPTION ? 'all employees' : selectedExportOption);
     toast({
         title: "Export Successful",
-        description: `Time entries for ${selectedExportOption === ALL_EMPLOYEES_OPTION ? 'all employees' : selectedExportOption} have been exported.`,
+        description: `Time entries for ${exportedForWhom} have been exported.`,
     });
   };
 
   const confirmClearEntries = () => {
-    setTimeLogs([]);
-    localStorage.removeItem('timeLogs');
+    // For members, only clear their own entries. Owners clear all.
+    if (userRole === 'member' && currentUserName) {
+        setTimeLogs(prevLogs => prevLogs.filter(log => log.name !== currentUserName));
+    } else if (userRole === 'owner') {
+        setTimeLogs([]);
+    }
+    // Note: localStorage will be updated by the useEffect on timeLogs
     setIsClearConfirmOpen(false);
     toast({
       title: "Entries Cleared",
-      description: "All time entries have been successfully cleared.",
+      description: userRole === 'member' ? `Your time entries have been cleared.` : `All time entries have been successfully cleared.`,
     });
   };
 
@@ -424,7 +448,7 @@ export default function Home() {
       {organizationStatus === 'member' && organizationDetails && (
         <>
           <p className="text-lg sm:text-xl text-muted-foreground">
-            Organization: {organizationDetails.name} {userRole === 'owner' ? '(Owner)' : userRole === 'member' ? '(Member)' : ''}
+            Organization: {organizationDetails.name} ({currentUserName} - {userRole === 'owner' ? 'Owner' : userRole === 'member' ? 'Member' : 'Role not set'})
           </p>
           {currentDateTime && (
             <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg">
@@ -445,6 +469,7 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="text-xl sm:text-2xl font-semibold">Organization Setup</CardTitle>
             <CardDescription>
+              {currentUserName && <p className="mb-2">Welcome, {currentUserName}!</p>}
               {showCreateOrgForm || showJoinOrgForm 
                 ? "Complete the form below." 
                 : "You need to create or join an organization to use the time clock."}
@@ -467,6 +492,7 @@ export default function Home() {
                 onOrganizationCreated={(org, inviteCode) => {
                   setOrganizationDetails(org);
                   setUserRole('owner');
+                  // currentUserName should be set from user.displayName via getUserProfile
                   setOrganizationStatus('member');
                   setShowCreateOrgForm(false);
                   setShowInviteCodeCreatedCard(true); 
@@ -480,6 +506,7 @@ export default function Home() {
                 onOrganizationJoined={(org) => {
                   setOrganizationDetails(org);
                   setUserRole('member'); 
+                  // currentUserName should be set from user.displayName via getUserProfile
                   setOrganizationStatus('member');
                   setShowJoinOrgForm(false);
                   setShowInviteCodeCreatedCard(false);
@@ -544,14 +571,14 @@ export default function Home() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Your Name (for this entry)</Label>
+            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Your Name (for time entry)</Label>
             <Input
               id="name"
               type="text"
-              placeholder="Enter your full name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary"
+              placeholder="Your name for clock-in"
+              value={currentUserName}
+              readOnly // Name is now read-only, taken from profile
+              className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary bg-muted/50 cursor-not-allowed"
             />
             <p className="text-xs text-muted-foreground mt-1">Logged in as: {user?.email}</p>
           </div>
@@ -559,7 +586,7 @@ export default function Home() {
           <div className="grid grid-cols-2 gap-4">
             <Button
               onClick={handleClockIn}
-              disabled={!name.trim() || isCurrentUserClockedIn}
+              disabled={!currentUserName.trim() || isCurrentUserClockedIn}
               size="lg"
               className="text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out bg-primary hover:bg-primary/90 text-primary-foreground"
               aria-label="Clock In"
@@ -568,7 +595,7 @@ export default function Home() {
             </Button>
             <Button
               onClick={handleClockOut}
-              disabled={!name.trim() || !isCurrentUserClockedIn}
+              disabled={!currentUserName.trim() || !isCurrentUserClockedIn}
               size="lg"
               className="bg-accent hover:bg-accent/90 text-accent-foreground text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out"
               aria-label="Clock Out"
@@ -580,8 +607,11 @@ export default function Home() {
       </Card>
 
       <Card className="w-full max-w-2xl shadow-xl rounded-xl">
-        <CardContent className="pt-6">
-          <TimeLogTable logs={todayLogs} />
+        <CardHeader>
+             <CardTitle className="text-xl sm:text-2xl font-semibold">Today's Time Entries</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0"> {/* Adjusted pt-0 as header now exists */}
+          <TimeLogTable logs={todayLogs} currentUserName={currentUserName} userRole={userRole} />
         </CardContent>
       </Card>
 
@@ -590,42 +620,48 @@ export default function Home() {
           <CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Data Management</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="export-select">Select Employee to Export</Label>
-            <Select value={selectedExportOption} onValueChange={setSelectedExportOption}>
-              <SelectTrigger id="export-select" className="w-full">
-                <SelectValue placeholder="Select an option" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_EMPLOYEES_OPTION}>All Employees</SelectItem>
-                {uniqueEmployeeNamesForExport.map(empName => (
-                  <SelectItem key={empName} value={empName}>
-                    {empName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {userRole === 'owner' && (
+            <div className="space-y-2">
+              <Label htmlFor="export-select">Select Employee to Export</Label>
+              <Select value={selectedExportOption} onValueChange={setSelectedExportOption} disabled={userRole === 'member'}>
+                <SelectTrigger id="export-select" className="w-full">
+                  <SelectValue placeholder="Select an option" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_EMPLOYEES_OPTION}>All Employees</SelectItem>
+                  {uniqueEmployeeNamesForExport.map(empName => (
+                    <SelectItem key={empName} value={empName}>
+                      {empName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {userRole === 'member' && (
+             <p className="text-sm text-muted-foreground">You can export your own time entries.</p>
+          )}
 
           <Button
             onClick={handleExport}
             variant="outline"
             className="w-full"
           >
-            <Download className="mr-2 h-5 w-5" /> Export to XLSX
+            <Download className="mr-2 h-5 w-5" /> Export to XLSX {userRole === 'member' ? `(My Entries)` : ''}
           </Button>
 
           <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" className="w-full">
-                <Trash2 className="mr-2 h-5 w-5" /> Clear All Entries (Local)
+                <Trash2 className="mr-2 h-5 w-5" /> Clear {userRole === 'member' ? 'My Entries (Local)' : 'All Entries (Local)'}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete all
+                  This action cannot be undone. This will permanently delete 
+                  {userRole === 'member' ? ' your ' : ' all '}
                   time log entries from your browser&apos;s local storage.
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -653,5 +689,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
