@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { createOrganizationWithInviteCode, joinOrganizationWithInviteCode, getUserOrganizationDetails, getUserProfile } from '@/lib/firebase/firestoreService';
+import { createOrganizationWithInviteCode, joinOrganizationWithInviteCode, getUserOrganizationDetails } from '@/lib/firebase/firestoreService';
 import type { Organization } from '@/interfaces/Organization';
 import type { UserProfile } from '@/interfaces/User';
 
@@ -90,7 +90,7 @@ function CreateOrganizationForm({
           {isCreating ? 'Creating...' : 'Create Organization'}
         </Button>
         <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isCreating}>
-          Go back to organization options
+          Go back to your organizations
         </Button>
       </div>
     </form>
@@ -151,7 +151,7 @@ function JoinOrganizationForm({
           {isJoining ? 'Joining...' : 'Join Organization'}
         </Button>
         <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isJoining}>
-          Go back to organization options
+          Go back to your organizations
         </Button>
       </div>
     </form>
@@ -190,6 +190,7 @@ export default function Home() {
     }
 
     setOrganizationStatus('loading');
+    setTimeLogs([]); // Clear logs when auth state changes before fetching new org details
     getUserOrganizationDetails(user.uid)
       .then(orgAndUserData => {
         if (orgAndUserData?.organization) {
@@ -198,25 +199,32 @@ export default function Home() {
           setCurrentUserName(orgAndUserData.userDisplayName || user.email?.split('@')[0] || 'User');
           setOrganizationStatus('member');
         } else {
-          // User might exist but not be in an org, or orgData is null due to an issue
           setCurrentUserName(orgAndUserData?.userDisplayName || user.displayName || user.email?.split('@')[0] || 'User');
           setOrganizationStatus('needsSetup');
+          setOrganizationDetails(null);
+          setUserRole(null);
           setShowCreateOrgForm(false);
           setShowJoinOrgForm(false);
+          setTimeLogs([]); // Ensure logs are cleared if no org
         }
       })
       .catch(error => {
         console.error("Error fetching organization or user details:", error);
         toast({ title: 'Error', description: 'Could not fetch your details. Please try refreshing.', variant: 'destructive'});
-        setCurrentUserName(user.displayName || user.email?.split('@')[0] || 'User'); // Fallback name
+        setCurrentUserName(user.displayName || user.email?.split('@')[0] || 'User');
         setOrganizationStatus('needsSetup');
+        setOrganizationDetails(null);
+        setUserRole(null);
+        setTimeLogs([]); // Ensure logs are cleared on error
       });
 
   }, [user, authLoading, router, toast]);
 
+  // Load time logs from localStorage when organizationDetails.id is available
   useEffect(() => {
-    if (user && organizationStatus === 'member') {
-      const storedLogs = localStorage.getItem('timeLogs');
+    if (user && organizationStatus === 'member' && organizationDetails?.id) {
+      const storageKey = `timeLogs_${organizationDetails.id}`;
+      const storedLogs = localStorage.getItem(storageKey);
       if (storedLogs) {
         try {
           const parsedLogs = JSON.parse(storedLogs, (key, value) => {
@@ -227,18 +235,26 @@ export default function Home() {
           }) as TimeLogEntry[];
           setTimeLogs(parsedLogs);
         } catch (error) {
-          console.error("Failed to parse logs from localStorage", error);
-          localStorage.removeItem('timeLogs');
+          console.error(`Failed to parse logs from localStorage (key: ${storageKey})`, error);
+          localStorage.removeItem(storageKey);
+          setTimeLogs([]);
         }
+      } else {
+        setTimeLogs([]); // No logs for this org, initialize as empty
       }
+    } else if (organizationStatus !== 'member' || !organizationDetails?.id) {
+        setTimeLogs([]); // Clear logs if not a member or no org ID
     }
-  }, [user, organizationStatus]);
+  }, [user, organizationStatus, organizationDetails?.id]);
 
+  // Save time logs to localStorage when timeLogs or organizationDetails.id changes
   useEffect(() => {
-    if (organizationStatus === 'member') {
-      localStorage.setItem('timeLogs', JSON.stringify(timeLogs));
+    if (organizationStatus === 'member' && organizationDetails?.id && timeLogs) {
+      const storageKey = `timeLogs_${organizationDetails.id}`;
+      localStorage.setItem(storageKey, JSON.stringify(timeLogs));
     }
-  }, [timeLogs, organizationStatus]);
+  }, [timeLogs, organizationStatus, organizationDetails?.id]);
+
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -304,30 +320,27 @@ export default function Home() {
   const todayLogs = useMemo(() => {
     if (organizationStatus !== 'member') return [];
     const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-    let logs = timeLogs.filter(log => log.date === todayDateStr);
+    let logsToDisplay = timeLogs.filter(log => log.date === todayDateStr);
 
     if (userRole === 'member' && currentUserName) {
-      logs = logs.filter(log => log.name === currentUserName);
+      logsToDisplay = logsToDisplay.filter(log => log.name === currentUserName);
     }
-    // For owners, all logs for the day are already included
 
-    return logs.sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
+    return logsToDisplay.sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
   }, [timeLogs, organizationStatus, userRole, currentUserName]);
 
   const uniqueEmployeeNamesForExport = useMemo(() => {
-    // For owners, get names from all today's logs (across the org from localStorage)
-    // For members, this list will effectively be just their name due to how `handleExport` logic is structured
-    if (userRole === 'owner') {
+    if (userRole === 'owner' && organizationDetails?.id) {
       const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+      // Ensure we're pulling from timeLogs which should be org-specific
       const names = new Set(timeLogs.filter(log => log.date === todayDateStr).map(log => log.name));
       return Array.from(names).sort((a, b) => a.localeCompare(b));
     }
-    // For members, they can only export their own, so only their name is relevant if they have logs
     if (currentUserName && timeLogs.some(log => log.name === currentUserName && log.date === format(new Date(), 'yyyy-MM-dd'))) {
       return [currentUserName];
     }
     return [];
-  }, [timeLogs, userRole, currentUserName]);
+  }, [timeLogs, userRole, currentUserName, organizationDetails?.id]);
 
 
   const formatDurationForExport = (startTime: Date, endTime: Date | null): string => {
@@ -344,19 +357,20 @@ export default function Home() {
   };
 
   const handleExport = () => {
-    let logsToProcess: TimeLogEntry[];
+    let logsToExport: TimeLogEntry[];
     let fileNamePart: string;
-    const allTodayLogsFromStorage = timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd'));
+    // timeLogs state is already scoped to the current organization
+    const allTodayLogsForCurrentOrg = timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd'));
 
     if (userRole === 'member' && currentUserName) {
-        logsToProcess = allTodayLogsFromStorage.filter(log => log.name === currentUserName);
+        logsToExport = allTodayLogsForCurrentOrg.filter(log => log.name === currentUserName);
         fileNamePart = currentUserName.replace(/\s+/g, '_');
     } else if (userRole === 'owner') {
         if (selectedExportOption === ALL_EMPLOYEES_OPTION) {
-            logsToProcess = [...allTodayLogsFromStorage].sort((a, b) => a.name.localeCompare(b.name));
+            logsToExport = [...allTodayLogsForCurrentOrg].sort((a, b) => a.name.localeCompare(b.name));
             fileNamePart = "All_Employees";
         } else {
-            logsToProcess = allTodayLogsFromStorage.filter(log => log.name === selectedExportOption);
+            logsToExport = allTodayLogsForCurrentOrg.filter(log => log.name === selectedExportOption);
             fileNamePart = selectedExportOption.replace(/\s+/g, '_');
         }
     } else {
@@ -364,18 +378,18 @@ export default function Home() {
         return;
     }
 
-    if (logsToProcess.length === 0) {
+    if (logsToExport.length === 0) {
       const forWhom = userRole === 'member' ? currentUserName :
                       (selectedExportOption === ALL_EMPLOYEES_OPTION ? 'today' : selectedExportOption);
       toast({
         title: "No Data",
-        description: `There are no time entries for ${forWhom} to export.`,
+        description: `There are no time entries for ${forWhom} to export for the current organization.`,
         variant: "destructive",
       });
       return;
     }
 
-    const dataToExport = logsToProcess.map(log => ({
+    const dataToExport = logsToExport.map(log => ({
       'Employee Name': log.name,
       'Clock In': format(log.clockIn, 'yyyy-MM-dd HH:mm:ss'),
       'Clock Out': log.clockOut ? format(log.clockOut, 'yyyy-MM-dd HH:mm:ss') : '---',
@@ -388,37 +402,50 @@ export default function Home() {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Time Logs');
 
     const todayDateFileName = format(new Date(), 'yyyy-MM-dd');
-    XLSX.writeFile(workbook, `TimeLogs_${fileNamePart}_${todayDateFileName}.xlsx`);
+    XLSX.writeFile(workbook, `TimeLogs_${fileNamePart}_${organizationDetails?.name.replace(/\s+/g, '_') || 'Org'}_${todayDateFileName}.xlsx`);
 
     const exportedForWhom = userRole === 'member' ? currentUserName :
                            (selectedExportOption === ALL_EMPLOYEES_OPTION ? 'all employees' : selectedExportOption);
     toast({
         title: "Export Successful",
-        description: `Time entries for ${exportedForWhom} have been exported.`,
+        description: `Time entries for ${exportedForWhom} (Org: ${organizationDetails?.name}) have been exported.`,
     });
   };
 
   const confirmClearEntries = () => {
+    // Operates on timeLogs state, which is already org-specific
     let initialLength = timeLogs.length;
     let clearedCount = 0;
 
     if (userRole === 'member' && currentUserName) {
-      const logsToKeep = timeLogs.filter(log => log.name !== currentUserName);
-      clearedCount = initialLength - logsToKeep.length;
-      setTimeLogs(logsToKeep);
+      const logsToKeep = timeLogs.filter(log => log.name !== currentUserName); // This logic seems off, should clear *only* current user's for today for current org
+      const userLogsForTodayInOrg = timeLogs.filter(log => log.name === currentUserName && log.date === format(new Date(), 'yyyy-MM-dd'));
+      clearedCount = userLogsForTodayInOrg.length;
+      setTimeLogs(prevLogs => prevLogs.filter(log => !(log.name === currentUserName && log.date === format(new Date(), 'yyyy-MM-dd'))));
+
     } else if (userRole === 'owner') {
-      clearedCount = initialLength;
-      setTimeLogs([]);
+      // Clear all logs for today for the current organization
+      const logsForTodayInOrg = timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd'));
+      clearedCount = logsForTodayInOrg.length;
+      setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== format(new Date(), 'yyyy-MM-dd')));
     } else {
       toast({ title: "Error", description: "Cannot determine clear scope.", variant: "destructive" });
       setIsClearConfirmOpen(false);
       return;
     }
+
     setIsClearConfirmOpen(false);
-    toast({
-      title: "Entries Cleared",
-      description: userRole === 'member' ? `Your ${clearedCount} time entr${clearedCount === 1 ? 'y has' : 'ies have'} been cleared.` : `${clearedCount} time entr${clearedCount === 1 ? 'y has' : 'ies have'} been successfully cleared.`,
-    });
+    if (clearedCount > 0) {
+      toast({
+        title: "Entries Cleared",
+        description: userRole === 'member' ? `Your ${clearedCount} time entr${clearedCount === 1 ? 'y has' : 'ies have'} been cleared for today in ${organizationDetails?.name}.` : `${clearedCount} time entr${clearedCount === 1 ? 'y has' : 'ies have'} been cleared for today in ${organizationDetails?.name}.`,
+      });
+    } else {
+       toast({
+        title: "No Entries to Clear",
+        description: userRole === 'member' ? `You have no entries for today in ${organizationDetails?.name} to clear.` : `No entries for today in ${organizationDetails?.name} to clear.`,
+      });
+    }
   };
 
 
@@ -437,7 +464,7 @@ export default function Home() {
     setShowCreateOrgForm(false);
     setShowJoinOrgForm(false);
     setShowInviteCodeCreatedCard(false);
-    // currentUserName will be re-fetched or fallback if user details are missing
+    setTimeLogs([]); // Clear logs when returning to org setup
   };
 
   if (organizationStatus === 'loading' || authLoading) {
@@ -465,6 +492,7 @@ export default function Home() {
           width={80}
           height={80}
           className="rounded-full shadow-lg"
+          data-ai-hint="logo sticker"
         />
         <Button onClick={logout} variant="outline" size="sm">
           <LogOut className="mr-2 h-4 w-4" /> Logout
@@ -535,7 +563,7 @@ export default function Home() {
                 userId={user.uid}
                 onOrganizationJoined={(org) => {
                   setOrganizationDetails(org);
-                  setUserRole('member'); // User who joins is a member
+                  setUserRole('member');
                   setCurrentUserName(user.displayName || user.email?.split('@')[0] || 'User');
                   setOrganizationStatus('member');
                   setShowJoinOrgForm(false);
@@ -550,7 +578,6 @@ export default function Home() {
     );
   }
 
-  // organizationStatus === 'member'
   return (
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       {commonHeader}
@@ -671,12 +698,12 @@ export default function Home() {
                 </SelectContent>
               </Select>
                {uniqueEmployeeNamesForExport.length === 0 && (
-                <p className="text-xs text-muted-foreground">No entries today to select an employee from.</p>
+                <p className="text-xs text-muted-foreground">No entries today in this organization to select an employee from.</p>
               )}
             </div>
           )}
           {userRole === 'member' && (
-             <p className="text-sm text-muted-foreground">You can export your own time entries.</p>
+             <p className="text-sm text-muted-foreground">You can export your own time entries for the current organization.</p>
           )}
 
           <Button
@@ -696,7 +723,7 @@ export default function Home() {
                 disabled={(userRole === 'member' && todayLogs.filter(log => log.name === currentUserName).length === 0) || (userRole === 'owner' && timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd')).length === 0 )}
               >
                 <Trash2 className="mr-2 h-5 w-5" />
-                Clear {userRole === 'member' ? 'My Entries (Local)' : 'All Entries (Local)'}
+                Clear {userRole === 'member' ? `My Entries for Today (Org: ${organizationDetails?.name || 'Current'})` : `All Entries for Today (Org: ${organizationDetails?.name || 'Current'})`}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -705,7 +732,7 @@ export default function Home() {
                 <AlertDialogDescription>
                   This action cannot be undone. This will permanently delete
                   {userRole === 'member' ? ' your ' : ' all '}
-                  time log entries from your browser&apos;s local storage for today.
+                  time log entries for today from your browser&apos;s local storage for the organization "{organizationDetails?.name || 'the current organization'}".
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
