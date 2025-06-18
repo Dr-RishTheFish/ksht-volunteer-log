@@ -4,7 +4,7 @@
 
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
-// import { getFirestore } from "firebase/firestore"; // Will be needed later
+import { getFirestore, type Firestore } from "firebase/firestore"; 
 
 const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
@@ -27,6 +27,17 @@ if (!projectId) {
   console.error("Firebase Error: NEXT_PUBLIC_FIREBASE_PROJECT_ID is missing in your .env.local file. Please add it and restart your development server.");
   crucialEnvVarsMissing = true;
 }
+// Optional vars, don't mark as crucial if missing
+if (!storageBucket) {
+  console.warn("Firebase Warning: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is missing. This might be needed for Firebase Storage features.");
+}
+if (!messagingSenderId) {
+  console.warn("Firebase Warning: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID is missing. This might be needed for Firebase Cloud Messaging.");
+}
+if (!appId) {
+  console.warn("Firebase Warning: NEXT_PUBLIC_FIREBASE_APP_ID is missing. This might be needed for certain Firebase integrations or analytics.");
+}
+
 
 const firebaseConfig = {
   apiKey: apiKey,
@@ -39,8 +50,8 @@ const firebaseConfig = {
 };
 
 let app: FirebaseApp | undefined;
-let auth: Auth | undefined;
-// let db; // Will be needed later
+let authInstance: Auth | undefined;
+let dbInstance: Firestore | undefined;
 
 if (!crucialEnvVarsMissing) {
   if (!getApps().length) {
@@ -48,7 +59,7 @@ if (!crucialEnvVarsMissing) {
       app = initializeApp(firebaseConfig);
     } catch (error) {
       console.error("Firebase initialization error:", error);
-      crucialEnvVarsMissing = true; // Treat as if vars were missing if init fails
+      crucialEnvVarsMissing = true; 
     }
   } else {
     app = getApp();
@@ -56,23 +67,24 @@ if (!crucialEnvVarsMissing) {
 
   if (app) {
     try {
-      auth = getAuth(app);
-      // db = getFirestore(app); // Will be needed later
+      authInstance = getAuth(app);
+      dbInstance = getFirestore(app); 
     } catch (error) {
-        console.error("Firebase getAuth() error:", error);
-        crucialEnvVarsMissing = true; // If getAuth fails, something is wrong
+        console.error("Firebase getAuth() or getFirestore() error:", error);
+        crucialEnvVarsMissing = true; 
     }
-  } else {
-    // This case should ideally not be reached if initializeApp/getApp logic is sound
-    // and no error was thrown by them, but as a safeguard:
-    console.error("Firebase app instance is undefined after initialization/retrieval attempt.");
+  } else if (!crucialEnvVarsMissing) { 
+    console.error("Firebase app instance is undefined after initialization/retrieval attempt, despite no crucial vars reported missing initially.");
     crucialEnvVarsMissing = true;
   }
 }
 
-if (crucialEnvVarsMissing && !auth) {
-  console.error("Firebase initialization was skipped or failed due to missing crucial environment variables or other errors. Auth features will not work.");
+if (crucialEnvVarsMissing && typeof window !== 'undefined' && !authInstance) {
+  const errorMessage = "Firebase is not configured correctly due to missing crucial environment variables (check console for specifics). Authentication and other Firebase features will not work. Please ensure your .env.local file is correctly set up and you have restarted your development server.";
+  console.error(errorMessage);
+} else if (crucialEnvVarsMissing && !authInstance) {
+    console.error("Firebase initialization was skipped or failed due to missing crucial environment variables or other errors (check server console for specifics). Auth and Firestore features will not work.");
 }
 
 
-export { app, auth /*, db */ };
+export { app, authInstance as auth, dbInstance as db };

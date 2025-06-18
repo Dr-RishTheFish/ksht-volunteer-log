@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2 } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
 import {
@@ -33,24 +33,42 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import { createOrganizationWithInviteCode, joinOrganizationWithInviteCode, getUserOrganizationDetails } from '@/lib/firebase/firestoreService';
+import type { Organization } from '@/interfaces/Organization';
+import type { UserProfile } from '@/interfaces/User';
+
 
 const ALL_EMPLOYEES_OPTION = "__ALL_EMPLOYEES__";
 
-// Placeholder Organization Setup Components
-function CreateOrganizationForm({ onOrganizationCreated, onBack }: { onOrganizationCreated: () => void; onBack: () => void; }) {
+function CreateOrganizationForm({ 
+  onOrganizationCreated, 
+  onBack,
+  userId 
+}: { 
+  onOrganizationCreated: (org: Organization, inviteCode: string) => void; 
+  onBack: () => void; 
+  userId: string;
+}) {
   const [orgName, setOrgName] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orgName.trim()) {
       toast({ title: 'Error', description: 'Organization name cannot be empty.', variant: 'destructive' });
       return;
     }
-    // Placeholder: In a real app, you'd save this to Firestore
-    console.log("Creating organization:", orgName);
-    toast({ title: 'Success', description: `Organization "${orgName}" created (simulated).` });
-    onOrganizationCreated();
+    setIsCreating(true);
+    try {
+      const newOrg = await createOrganizationWithInviteCode(userId, orgName.trim());
+      toast({ title: 'Success', description: `Organization "${newOrg.name}" created.` });
+      onOrganizationCreated(newOrg, newOrg.inviteCode);
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Failed to create organization.', variant: 'destructive' });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -63,30 +81,53 @@ function CreateOrganizationForm({ onOrganizationCreated, onBack }: { onOrganizat
           onChange={(e) => setOrgName(e.target.value)}
           placeholder="Your Company Inc."
           className="mt-1"
+          disabled={isCreating}
         />
       </div>
-      <Button type="submit" className="w-full">Create Organization</Button>
-      <Button type="button" variant="link" onClick={onBack} className="w-full mt-2">
+      <Button type="submit" className="w-full" disabled={isCreating}>
+        {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        {isCreating ? 'Creating...' : 'Create Organization'}
+      </Button>
+      <Button type="button" variant="link" onClick={onBack} className="w-full mt-2" disabled={isCreating}>
         Back to options
       </Button>
     </form>
   );
 }
 
-function JoinOrganizationForm({ onOrganizationJoined, onBack }: { onOrganizationJoined: () => void; onBack: () => void; }) {
+function JoinOrganizationForm({ 
+  onOrganizationJoined, 
+  onBack,
+  userId
+}: { 
+  onOrganizationJoined: (org: Organization) => void; 
+  onBack: () => void; 
+  userId: string;
+}) {
   const [inviteCode, setInviteCode] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteCode.trim()) {
       toast({ title: 'Error', description: 'Invite code cannot be empty.', variant: 'destructive' });
       return;
     }
-    // Placeholder: In a real app, you'd validate this code and update user's org in Firestore
-    console.log("Joining organization with code:", inviteCode);
-    toast({ title: 'Success', description: `Joined organization with code "${inviteCode}" (simulated).` });
-    onOrganizationJoined();
+    setIsJoining(true);
+    try {
+      const joinedOrg = await joinOrganizationWithInviteCode(userId, inviteCode.trim());
+      if (joinedOrg) {
+        toast({ title: 'Success', description: `Successfully joined "${joinedOrg.name}".` });
+        onOrganizationJoined(joinedOrg);
+      } else {
+        toast({ title: 'Error', description: 'Invalid invite code or organization not found.', variant: 'destructive' });
+      }
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Failed to join organization.', variant: 'destructive' });
+    } finally {
+      setIsJoining(false);
+    }
   };
 
   return (
@@ -99,10 +140,14 @@ function JoinOrganizationForm({ onOrganizationJoined, onBack }: { onOrganization
           onChange={(e) => setInviteCode(e.target.value)}
           placeholder="Enter invite code"
           className="mt-1"
+          disabled={isJoining}
         />
       </div>
-      <Button type="submit" className="w-full">Join Organization</Button>
-      <Button type="button" variant="link" onClick={onBack} className="w-full mt-2">
+      <Button type="submit" className="w-full" disabled={isJoining}>
+        {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        {isJoining ? 'Joining...' : 'Join Organization'}
+      </Button>
+      <Button type="button" variant="link" onClick={onBack} className="w-full mt-2" disabled={isJoining}>
         Back to options
       </Button>
     </form>
@@ -111,35 +156,63 @@ function JoinOrganizationForm({ onOrganizationJoined, onBack }: { onOrganization
 
 
 export default function Home() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
 
-  const [name, setName] = useState<string>(''); // Employee name for clocking in/out
+  const [name, setName] = useState<string>(''); 
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [selectedExportOption, setSelectedExportOption] = useState<string>(ALL_EMPLOYEES_OPTION);
 
-  // Organization state: 'unknown', 'needsSetup', 'member'
-  const [organizationStatus, setOrganizationStatus] = useState<'unknown' | 'needsSetup' | 'member'>('unknown');
+  const [organizationStatus, setOrganizationStatus] = useState<'unknown' | 'needsSetup' | 'member' | 'loading'>('loading');
+  const [organizationDetails, setOrganizationDetails] = useState<Organization | null>(null);
+  const [userRole, setUserRole] = useState<UserProfile['role']>(null);
+  
   const [showCreateOrgForm, setShowCreateOrgForm] = useState(false);
   const [showJoinOrgForm, setShowJoinOrgForm] = useState(false);
+  const [showInviteCodeSection, setShowInviteCodeSection] = useState(false);
+  const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
+
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    } else if (user && organizationStatus === 'unknown') {
-      // Simulate checking if user belongs to an organization.
-      // For now, assume every new login/signup needs setup.
-      // In a real app, this would check Firestore for user.organizationId
-      setOrganizationStatus('needsSetup');
+    if (authLoading) {
+      setOrganizationStatus('loading');
+      return;
     }
-  }, [user, loading, router, organizationStatus]);
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    // User is authenticated, check their organization status
+    setOrganizationStatus('loading'); // Set to loading while fetching
+    getUserOrganizationDetails(user.uid)
+      .then(orgData => {
+        if (orgData) {
+          setOrganizationDetails(orgData.organization);
+          setUserRole(orgData.userRole);
+          setOrganizationStatus('member');
+          if (orgData.userRole === 'owner' && orgData.organization.inviteCode) {
+             // If they just created it or are the owner, show invite code section
+             setGeneratedInviteCode(orgData.organization.inviteCode);
+             setShowInviteCodeSection(true);
+          }
+        } else {
+          setOrganizationStatus('needsSetup');
+        }
+      })
+      .catch(error => {
+        console.error("Error fetching organization details:", error);
+        toast({ title: 'Error', description: 'Could not fetch organization details.', variant: 'destructive'});
+        setOrganizationStatus('needsSetup'); // Fallback to needsSetup on error
+      });
+
+  }, [user, authLoading, router, toast]);
   
   useEffect(() => {
     if (user && organizationStatus === 'member') {
-      // Load time logs if user is authenticated and part of an org
       const storedLogs = localStorage.getItem('timeLogs');
       if (storedLogs) {
         try {
@@ -155,6 +228,9 @@ export default function Home() {
           localStorage.removeItem('timeLogs');
         }
       }
+      // Set default name for clocking in/out if user is available
+      setName(user.displayName || user.email || '');
+
     }
   }, [user, organizationStatus]);
 
@@ -303,7 +379,15 @@ export default function Home() {
     });
   };
 
-  if (loading || (!user && organizationStatus === 'unknown')) {
+  const handleCopyInviteCode = () => {
+    if (generatedInviteCode) {
+      navigator.clipboard.writeText(generatedInviteCode)
+        .then(() => toast({ title: "Copied!", description: "Invite code copied to clipboard." }))
+        .catch(() => toast({ title: "Error", description: "Could not copy invite code.", variant: "destructive" }));
+    }
+  };
+
+  if (organizationStatus === 'loading' || authLoading) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-secondary/10">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -312,8 +396,7 @@ export default function Home() {
   }
 
   if (!user) {
-    // This case should ideally be handled by the useEffect redirect,
-    // but as a fallback:
+    // This case should ideally be handled by the useEffect redirect, but as a fallback:
     return (
       <main className="min-h-screen flex items-center justify-center">
         <p>Redirecting to login...</p>
@@ -330,6 +413,7 @@ export default function Home() {
           width={80}
           height={80}
           className="rounded-full shadow-lg"
+          data-ai-hint="logo sticker"
         />
         <Button onClick={logout} variant="outline" size="sm">
           <LogOut className="mr-2 h-4 w-4" /> Logout
@@ -340,10 +424,10 @@ export default function Home() {
           Big Brainbox Time Clock
         </span>
       </h1>
-      {organizationStatus === 'member' && (
+      {organizationStatus === 'member' && organizationDetails && (
         <>
           <p className="text-lg sm:text-xl text-muted-foreground">
-            Professional time tracking for your organization.
+            Organization: {organizationDetails.name} {userRole === 'owner' ? '(Owner)' : '(Member)'}
           </p>
           {currentDateTime && (
             <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg">
@@ -380,15 +464,29 @@ export default function Home() {
                 </Button>
               </div>
             )}
-            {showCreateOrgForm && (
+            {showCreateOrgForm && user && (
               <CreateOrganizationForm
-                onOrganizationCreated={() => setOrganizationStatus('member')}
+                userId={user.uid}
+                onOrganizationCreated={(org, inviteCode) => {
+                  setOrganizationDetails(org);
+                  setUserRole('owner');
+                  setGeneratedInviteCode(inviteCode);
+                  setShowInviteCodeSection(true);
+                  setOrganizationStatus('member');
+                  setShowCreateOrgForm(false);
+                }}
                 onBack={() => setShowCreateOrgForm(false)}
               />
             )}
-            {showJoinOrgForm && (
+            {showJoinOrgForm && user && (
               <JoinOrganizationForm
-                onOrganizationJoined={() => setOrganizationStatus('member')}
+                userId={user.uid}
+                onOrganizationJoined={(org) => {
+                  setOrganizationDetails(org);
+                  setUserRole('member');
+                  setOrganizationStatus('member');
+                  setShowJoinOrgForm(false);
+                }}
                 onBack={() => setShowJoinOrgForm(false)}
               />
             )}
@@ -404,6 +502,40 @@ export default function Home() {
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       {commonHeader}
 
+      {showInviteCodeSection && generatedInviteCode && userRole === 'owner' && organizationDetails && (
+        <Card className="w-full max-w-md shadow-xl rounded-xl bg-green-50 border-green-200 dark:bg-green-900/30 dark:border-green-700">
+          <CardHeader>
+            <CardTitle className="text-lg sm:text-xl font-semibold text-green-700 dark:text-green-300 flex items-center gap-2">
+              <Info className="h-5 w-5" /> Organization Created!
+            </CardTitle>
+            <CardDescription className="text-green-600 dark:text-green-400">
+              Share this invite code with your team members to join "{organizationDetails.name}".
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <div className="p-3 bg-green-100 dark:bg-green-800/50 rounded-md inline-flex items-center gap-2">
+              <Label htmlFor="inviteCodeDisplay" className="sr-only">Invite Code</Label>
+              <Input 
+                id="inviteCodeDisplay"
+                type="text" 
+                value={generatedInviteCode} 
+                readOnly 
+                className="text-2xl font-mono tracking-wider text-green-800 dark:text-green-200 bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 h-auto p-0" 
+              />
+              <Button variant="ghost" size="sm" onClick={handleCopyInviteCode} aria-label="Copy invite code">
+                <Copy className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </Button>
+            </div>
+          </CardContent>
+          <CardFooter>
+             <Button variant="outline" size="sm" className="w-full" onClick={() => setShowInviteCodeSection(false)}>
+                Dismiss
+             </Button>
+          </CardFooter>
+        </Card>
+      )}
+
+
       <Card className="w-full max-w-md shadow-xl rounded-xl">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl font-semibold">
@@ -413,15 +545,16 @@ export default function Home() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Employee Name (Your Name: {user?.displayName || user?.email})</Label>
+            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Your Name (for this entry)</Label>
             <Input
               id="name"
               type="text"
-              placeholder="Enter your full name for this entry"
+              placeholder="Enter your full name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary"
             />
+            <p className="text-xs text-muted-foreground mt-1">Logged in as: {user?.email}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -521,4 +654,3 @@ export default function Home() {
     </main>
   );
 }
-
