@@ -90,7 +90,7 @@ function CreateOrganizationForm({
           {isCreating ? 'Creating...' : 'Create Organization'}
         </Button>
         <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isCreating}>
-          Back to options
+          Go back to your organizations
         </Button>
       </div>
     </form>
@@ -151,7 +151,7 @@ function JoinOrganizationForm({
           {isJoining ? 'Joining...' : 'Join Organization'}
         </Button>
         <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isJoining}>
-          Back to options
+          Go back to your organizations
         </Button>
       </div>
     </form>
@@ -177,8 +177,6 @@ export default function Home() {
   const [showCreateOrgForm, setShowCreateOrgForm] = useState(false);
   const [showJoinOrgForm, setShowJoinOrgForm] = useState(false);
   
-  // This state is for the *initial prominent display* after creation.
-  // The actual invite code for an owner will always be available in organizationDetails.inviteCode
   const [showInviteCodeCreatedCard, setShowInviteCodeCreatedCard] = useState(false);
 
 
@@ -199,10 +197,9 @@ export default function Home() {
           setOrganizationDetails(orgData.organization);
           setUserRole(orgData.userRole);
           setOrganizationStatus('member');
-          // If they are an owner, the invite code card logic will handle display using organizationDetails
         } else {
           setOrganizationStatus('needsSetup');
-          setShowCreateOrgForm(false); // Ensure forms are reset if user has no org
+          setShowCreateOrgForm(false); 
           setShowJoinOrgForm(false);
         }
       })
@@ -472,7 +469,7 @@ export default function Home() {
                   setUserRole('owner');
                   setOrganizationStatus('member');
                   setShowCreateOrgForm(false);
-                  setShowInviteCodeCreatedCard(true); // Show the "created" card
+                  setShowInviteCodeCreatedCard(true); 
                 }}
                 onBack={() => {setShowCreateOrgForm(false); setShowJoinOrgForm(false);}}
               />
@@ -482,7 +479,7 @@ export default function Home() {
                 userId={user.uid}
                 onOrganizationJoined={(org) => {
                   setOrganizationDetails(org);
-                  setUserRole('member'); // Role will be 'member' when joining
+                  setUserRole('member'); 
                   setOrganizationStatus('member');
                   setShowJoinOrgForm(false);
                   setShowInviteCodeCreatedCard(false);
@@ -656,3 +653,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
