@@ -460,12 +460,11 @@ export default function Home() {
     <div className="text-center space-y-4 w-full max-w-2xl mb-8">
       <div className="flex justify-between items-center w-full">
         <Image
-          src="https://placehold.co/80x80.png"
+          src="/Stickers.png"
           alt="Big Brainbox Logo"
           width={80}
           height={80}
           className="rounded-full shadow-lg"
-          data-ai-hint="logo sticker"
         />
         <Button onClick={logout} variant="outline" size="sm">
           <LogOut className="mr-2 h-4 w-4" /> Logout
