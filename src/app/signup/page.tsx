@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -64,6 +65,16 @@ export default function SignupPage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center justify-center p-4 sm:p-8 selection:bg-primary/20 selection:text-primary">
+      <div className="mb-8">
+        <Image 
+          src="/Stickers.png" 
+          alt="Big Brainbox Logo" 
+          width={100} 
+          height={100} 
+          className="rounded-full shadow-lg" 
+          data-ai-hint="logo sticker"
+        />
+      </div>
       <Card className="w-full max-w-md shadow-xl rounded-xl">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl sm:text-3xl font-bold flex items-center justify-center gap-2">

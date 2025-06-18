@@ -292,12 +292,18 @@ export default function Home() {
       } else {
         setTimeLogs([]);
       }
-      setDisplayDate(new Date()); // Reset display date when org changes
+      // Reset display date only when org ID truly changes to a new one
+      // This avoids resetting the date if the effect re-runs due to other state changes
+      // but the org ID remains the same.
+      if (organizationDetails?.id !== (organizationDetails && organizationDetails.id)) {
+         setDisplayDate(new Date());
+      }
     } else if (componentState !== 'memberView' || !organizationDetails?.id) {
         setTimeLogs([]); 
         setDisplayDate(new Date());
     }
   }, [user, componentState, organizationDetails?.id]);
+
 
   useEffect(() => {
     if (componentState === 'memberView' && organizationDetails?.id && timeLogs) {
@@ -333,7 +339,7 @@ export default function Home() {
     } else {
       setOrganizationMembers([]); 
     }
-  }, [componentState, userRole, organizationDetails?.id, toast]);
+  }, [componentState, userRole, organizationDetails?.id, toast, manualSelectedEmployeeId]);
 
 
   const isCurrentUserClockedIn = useMemo(() => {
@@ -502,6 +508,7 @@ export default function Home() {
     setComponentState('memberView');
     setShowInviteCodeCreatedCard(false);
     setTimeLogs([]); 
+    // Ensure displayDate is reset here when explicitly selecting an organization
     setDisplayDate(new Date());
   };
 
@@ -780,6 +787,7 @@ export default function Home() {
     );
   }
   
+  // componentState === 'memberView'
   return (
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       {commonHeader}
