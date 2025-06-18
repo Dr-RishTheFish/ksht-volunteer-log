@@ -44,10 +44,7 @@ export default function SignupPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Update Firebase Auth profile first
       await updateProfile(user, { displayName: fullName.trim() });
-
-      // Then create/update Firestore document, passing the displayName explicitly
       await createUserDocument(user, fullName.trim());
 
       toast({ title: 'Signup Successful', description: 'Your account has been created.' });
@@ -71,8 +68,9 @@ export default function SignupPage() {
           alt="Big Brainbox Logo" 
           width={100} 
           height={100} 
-          className="rounded-full shadow-lg" 
+          className="rounded-full shadow-lg"
           data-ai-hint="logo sticker"
+          priority
         />
       </div>
       <Card className="w-full max-w-md shadow-xl rounded-xl">

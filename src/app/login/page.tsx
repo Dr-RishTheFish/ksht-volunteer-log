@@ -82,7 +82,7 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      await createUserDocument(user); // Ensure user document exists in Firestore
+      await createUserDocument(user, user.displayName || undefined); 
       toast({ title: 'Login Successful', description: `Welcome, ${user.displayName}!` });
       router.push('/');
     } catch (error: any) {
@@ -104,8 +104,9 @@ export default function LoginPage() {
           alt="Big Brainbox Logo" 
           width={100} 
           height={100} 
-          className="rounded-full shadow-lg" 
+          className="rounded-full shadow-lg"
           data-ai-hint="logo sticker"
+          priority
         />
       </div>
       <Card className="w-full max-w-md shadow-xl rounded-xl">
