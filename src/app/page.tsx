@@ -6,11 +6,12 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format, parse } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy, Settings, PlusCircle, MoreVertical, Edit3, Calendar as CalendarIcon } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy, Settings, PlusCircle, MoreVertical, Edit3, Calendar as CalendarIcon, StickyNote } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
 import {
@@ -207,6 +208,7 @@ export default function Home() {
   const [manualDate, setManualDate] = useState<Date | undefined>(new Date());
   const [manualClockInTime, setManualClockInTime] = useState<string>(''); // HH:mm
   const [manualClockOutTime, setManualClockOutTime] = useState<string>(''); // HH:mm
+  const [manualNote, setManualNote] = useState<string>('');
   const [isAddingManualEntry, setIsAddingManualEntry] = useState(false);
 
 
@@ -315,7 +317,7 @@ export default function Home() {
         .then(members => {
           setOrganizationMembers(members);
           if (members.length > 0 && !manualSelectedEmployeeId) {
-            setManualSelectedEmployeeId(members[0].uid); // Default to first member
+            setManualSelectedEmployeeId(members[0].uid); 
           }
         })
         .catch(error => {
@@ -324,7 +326,7 @@ export default function Home() {
           setOrganizationMembers([]);
         });
     } else {
-      setOrganizationMembers([]); // Clear if not owner or not in member view
+      setOrganizationMembers([]); 
     }
   }, [componentState, userRole, organizationDetails?.id, toast]);
 
@@ -436,6 +438,7 @@ export default function Home() {
       'Clock Out': log.clockOut ? format(log.clockOut, 'yyyy-MM-dd HH:mm:ss') : '---',
       'Duration': formatDurationForExport(log.clockIn, log.clockOut),
       'Status': log.clockOut ? 'Completed' : 'In Progress',
+      'Note': log.note || '',
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
@@ -461,7 +464,7 @@ export default function Home() {
     } else if (userRole === 'owner') {
       const logsForTodayInOrg = timeLogs.filter(log => log.date === todayDateStr);
       clearedCount = logsForTodayInOrg.length;
-      setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== todayDateStr)); // Clears all for today in current org
+      setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== todayDateStr)); 
       if (clearedCount > 0) {
         toast({ title: "All Entries Cleared", description: `All ${clearedCount} time entr${clearedCount === 1 ? 'y' : 'ies'} for today in ${organizationDetails.name} have been cleared from local storage.` });
       } else {
@@ -515,11 +518,11 @@ export default function Home() {
       toast({ title: 'Organization Deleted', description: `"${orgToDelete.name}" has been deleted.` });
       setOrgToDelete(null);
       setIsDeleteDialogOpen(false);
-      fetchAndSetUserAssociatedOrgs(user.uid); // Refresh list
+      fetchAndSetUserAssociatedOrgs(user.uid); 
       if (organizationDetails?.id === orgToDelete.id) {
         setOrganizationDetails(null);
         setUserRole(null);
-        setComponentState('orgSelection'); // Go back to selection if current org was deleted
+        setComponentState('orgSelection'); 
         setOrgSelectionSubView('list');
       }
     } catch (error: any) {
@@ -570,17 +573,15 @@ export default function Home() {
         clockIn: clockInDateTime,
         clockOut: clockOutDateTime,
         date: dateStr,
+        note: manualNote.trim() || undefined,
       };
 
       setTimeLogs(prevLogs => [...prevLogs, newLog].sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime()));
       toast({ title: "Manual Entry Added", description: `Time log added for ${selectedEmployee.displayName}.` });
 
-      // Reset form
       setManualClockInTime('');
       setManualClockOutTime('');
-      // setManualDate(new Date()); // Optionally reset date or keep it
-      // setManualSelectedEmployeeId(organizationMembers.length > 0 ? organizationMembers[0].uid : ''); // Optionally reset employee
-
+      setManualNote('');
     } catch (error) {
       console.error("Error processing manual time entry:", error);
       toast({ title: "Error Adding Entry", description: "Could not add manual time entry.", variant: "destructive"});
@@ -737,7 +738,6 @@ export default function Home() {
     );
   }
   
-  // componentState === 'memberView'
   return (
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       {commonHeader}
@@ -858,6 +858,17 @@ export default function Home() {
                   />
                 </div>
               </div>
+               <div className="space-y-2">
+                <Label htmlFor="manualNote">Note (Optional)</Label>
+                <Textarea
+                  id="manualNote"
+                  placeholder="Reason for manual entry, project details, etc."
+                  value={manualNote}
+                  onChange={(e) => setManualNote(e.target.value)}
+                  disabled={isAddingManualEntry}
+                  rows={3}
+                />
+              </div>
               <Button type="submit" className="w-full" disabled={isAddingManualEntry || !manualSelectedEmployeeId || !manualDate || !manualClockInTime}>
                 {isAddingManualEntry ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {isAddingManualEntry ? 'Adding Entry...' : 'Add Manual Time Entry'}
@@ -944,5 +955,3 @@ export default function Home() {
     </main>
   );
 }
-
-    

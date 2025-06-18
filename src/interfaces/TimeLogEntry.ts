@@ -4,4 +4,5 @@ export interface TimeLogEntry {
   clockIn: Date;
   clockOut: Date | null;
   date: string; // Format: YYYY-MM-DD
+  note?: string;
 }

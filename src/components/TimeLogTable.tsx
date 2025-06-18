@@ -16,6 +16,8 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { useState, useEffect } from 'react';
 import type { UserProfile } from '@/interfaces/User';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { StickyNote } from 'lucide-react';
 
 interface TimeLogTableProps {
   logs: TimeLogEntry[];
@@ -73,41 +75,56 @@ export function TimeLogTable({ logs, userRole, currentUserName }: TimeLogTablePr
         </p>
       ) : (
         <ScrollArea className="h-[300px] rounded-md border">
-          <Table>
-            <TableCaption>{captionText}</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Clock In</TableHead>
-                <TableHead>Clock Out</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {logs.map((log) => (
-                <TableRow key={log.id} className={log.name === currentUserName && userRole === 'member' ? 'bg-primary/10' : ''}>
-                  <TableCell className="font-medium">{log.name}</TableCell>
-                  <TableCell>{format(log.clockIn, 'pp')}</TableCell>
-                  <TableCell>
-                    {log.clockOut ? format(log.clockOut, 'pp') : '---'}
-                  </TableCell>
-                  <TableCell>{formatDuration(log.clockIn, log.clockOut)}</TableCell>
-                  <TableCell>
-                    {log.clockOut ? (
-                      <Badge variant="default" className="bg-green-500 hover:bg-green-600">Completed</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-600">In Progress</Badge>
-                    )}
-                  </TableCell>
+          <TooltipProvider>
+            <Table>
+              <TableCaption>{captionText}</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Clock In</TableHead>
+                  <TableHead>Clock Out</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-center">Note</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {logs.map((log) => (
+                  <TableRow key={log.id} className={log.name === currentUserName && userRole === 'member' ? 'bg-primary/10' : ''}>
+                    <TableCell className="font-medium">{log.name}</TableCell>
+                    <TableCell>{format(log.clockIn, 'pp')}</TableCell>
+                    <TableCell>
+                      {log.clockOut ? format(log.clockOut, 'pp') : '---'}
+                    </TableCell>
+                    <TableCell>{formatDuration(log.clockIn, log.clockOut)}</TableCell>
+                    <TableCell>
+                      {log.clockOut ? (
+                        <Badge variant="default" className="bg-green-500 hover:bg-green-600">Completed</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-600">In Progress</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {log.note ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <StickyNote className="h-5 w-5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs break-words">
+                            <p>{log.note}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-muted-foreground/50">---</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TooltipProvider>
         </ScrollArea>
       )}
     </div>
   );
 }
-
-    
