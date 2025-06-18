@@ -17,7 +17,7 @@ const generateInviteCode = (length: number = 8): string => {
 
 export const createUserDocument = async (user: FirebaseUser): Promise<void> => {
   if (!db) {
-    console.error("Firestore (db) is not initialized in createUserDocument. Check Firebase configuration and ensure client is not offline due to rules/config.");
+    console.error("Firestore (db) is not initialized in createUserDocument. Check Firebase configuration.");
     throw new Error("Firestore (db) is not initialized. Check Firebase configuration.");
   }
   if (!user) {
@@ -25,12 +25,17 @@ export const createUserDocument = async (user: FirebaseUser): Promise<void> => {
     throw new Error("User object is missing.");
   }
   
+  const userPath = `users/${user.uid}`;
   const userRef = doc(db, 'users', user.uid);
-  const userDoc = await getDoc(userRef);
 
-  if (!userDoc.exists()) {
-    try {
-      const userProfile: UserProfile = { // Ensure all fields are present
+  console.log(`[firestoreService] Attempting to get document at path: ${userPath}`);
+  try {
+    const userDoc = await getDoc(userRef);
+    console.log(`[firestoreService] Successfully got document at path: ${userPath}. Exists: ${userDoc.exists()}`);
+
+    if (!userDoc.exists()) {
+      console.log(`[firestoreService] User document does not exist at ${userPath}. Attempting to create.`);
+      const userProfile: UserProfile = {
         uid: user.uid,
         email: user.email,
         displayName: user.displayName || user.email?.split('@')[0] || 'Anonymous User',
@@ -38,11 +43,17 @@ export const createUserDocument = async (user: FirebaseUser): Promise<void> => {
         role: null,
         createdAt: new Date(), 
       };
-      await setDoc(userRef, userProfile);
-    } catch (error) {
-      console.error("Error creating user document in Firestore:", error);
-      throw error; // Re-throw to be caught by calling UI
+      try {
+        await setDoc(userRef, userProfile);
+        console.log(`[firestoreService] Successfully created document at path: ${userPath}`);
+      } catch (setError) {
+        console.error(`[firestoreService] Firestore error during setDoc at path: ${userPath}`, setError);
+        throw setError;
+      }
     }
+  } catch (getError) {
+    console.error(`[firestoreService] Firestore error during getDoc at path: ${userPath}`, getError);
+    throw getError; 
   }
 };
 
@@ -51,7 +62,7 @@ export const createOrganizationWithInviteCode = async (
   orgName: string
 ): Promise<Organization> => {
   if (!db) {
-    console.error("Firestore (db) is not initialized for createOrganizationWithInviteCode. Check Firebase configuration and ensure client is not offline due to rules/config.");
+    console.error("Firestore (db) is not initialized for createOrganizationWithInviteCode.");
     throw new Error("Firestore (db) is not initialized.");
   }
   if (!auth) {
@@ -59,12 +70,15 @@ export const createOrganizationWithInviteCode = async (
      throw new Error("Firebase Auth is not initialized.");
   }
   if (!userId || !orgName) {
+    console.error("Missing userId or orgName for creating organization.");
     throw new Error("Missing userId or orgName for creating organization.");
   }
 
   const inviteCode = generateInviteCode(8); 
-  const organizationsRef = collection(db, 'organizations');
+  const organizationsPath = 'organizations';
+  const organizationsRef = collection(db, organizationsPath);
   
+  console.log(`[firestoreService] Attempting to add document to collection: ${organizationsPath}`);
   try {
     const newOrgDocRef = await addDoc(organizationsRef, {
       name: orgName.trim(),
@@ -73,19 +87,32 @@ export const createOrganizationWithInviteCode = async (
       createdAt: serverTimestamp(), 
       memberUids: [userId], 
     });
+    console.log(`[firestoreService] Successfully added organization document with ID: ${newOrgDocRef.id}`);
 
+    const userPath = `users/${userId}`;
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
-      organizationId: newOrgDocRef.id,
-      role: 'owner',
-    });
+    console.log(`[firestoreService] Attempting to update document at path: ${userPath} (setting organizationId and role)`);
+    try {
+      await updateDoc(userRef, {
+        organizationId: newOrgDocRef.id,
+        role: 'owner',
+      });
+      console.log(`[firestoreService] Successfully updated user document at path: ${userPath}`);
+    } catch (updateError) {
+      console.error(`[firestoreService] Firestore error during updateDoc at path: ${userPath}`, updateError);
+      throw updateError;
+    }
     
+    const createdOrgDocPath = `organizations/${newOrgDocRef.id}`;
+    console.log(`[firestoreService] Attempting to get created organization document at path: ${createdOrgDocPath}`);
     const createdOrgDoc = await getDoc(newOrgDocRef);
     const orgData = createdOrgDoc.data();
 
     if (!orgData) {
+      console.error(`[firestoreService] Failed to retrieve created organization data from path: ${createdOrgDocPath}`);
       throw new Error("Failed to retrieve created organization data.");
     }
+    console.log(`[firestoreService] Successfully retrieved created organization data from path: ${createdOrgDocPath}`);
 
     return {
       id: newOrgDocRef.id,
@@ -95,9 +122,9 @@ export const createOrganizationWithInviteCode = async (
       createdAt: (orgData.createdAt as Timestamp)?.toDate() || new Date(),
     };
 
-  } catch (error) {
-    console.error("Error creating organization in Firestore:", error);
-    throw error;
+  } catch (addError) {
+    console.error(`[firestoreService] Error creating organization in Firestore at collection: ${organizationsPath}`, addError);
+    throw addError;
   }
 };
 
@@ -106,7 +133,7 @@ export const joinOrganizationWithInviteCode = async (
   inviteCode: string
 ): Promise<Organization | null> => {
   if (!db) {
-    console.error("Firestore (db) is not initialized for joinOrganizationWithInviteCode. Check Firebase configuration and ensure client is not offline due to rules/config.");
+    console.error("Firestore (db) is not initialized for joinOrganizationWithInviteCode.");
     throw new Error("Firestore (db) is not initialized.");
   }
   if (!auth) {
@@ -114,16 +141,20 @@ export const joinOrganizationWithInviteCode = async (
      throw new Error("Firebase Auth is not initialized.");
   }
    if (!userId || !inviteCode) {
+    console.error("Missing userId or inviteCode for joining organization.");
     throw new Error("Missing userId or inviteCode for joining organization.");
   }
 
-  const organizationsRef = collection(db, 'organizations');
+  const organizationsPath = 'organizations';
+  const organizationsRef = collection(db, organizationsPath);
   const q = query(organizationsRef, where("inviteCode", "==", inviteCode.trim().toUpperCase()));
 
+  console.log(`[firestoreService] Attempting to query collection: ${organizationsPath} for inviteCode: ${inviteCode.trim().toUpperCase()}`);
   try {
     const querySnapshot = await getDocs(q);
+    console.log(`[firestoreService] Successfully queried organizations. Found: ${querySnapshot.size} match(es).`);
     if (querySnapshot.empty) {
-      console.log("No organization found with this invite code:", inviteCode.trim().toUpperCase());
+      console.log("[firestoreService] No organization found with this invite code.");
       return null;
     }
 
@@ -131,18 +162,34 @@ export const joinOrganizationWithInviteCode = async (
     const organizationId = orgDoc.id;
     const organizationData = orgDoc.data() as Omit<Organization, 'id' | 'createdAt'> & { createdAt: Timestamp; memberUids?: string[] };
 
-
+    const userPath = `users/${userId}`;
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
-      organizationId: organizationId,
-      role: 'member',
-    });
+    console.log(`[firestoreService] Attempting to update document at path: ${userPath} (setting organizationId and role for join)`);
+    try {
+      await updateDoc(userRef, {
+        organizationId: organizationId,
+        role: 'member',
+      });
+      console.log(`[firestoreService] Successfully updated user document at path: ${userPath}`);
+    } catch (updateUserError) {
+      console.error(`[firestoreService] Firestore error during updateDoc (user) at path: ${userPath}`, updateUserError);
+      throw updateUserError;
+    }
+    
 
     const currentMemberUids = organizationData.memberUids || [];
     if (!currentMemberUids.includes(userId)) {
-      await updateDoc(doc(db, 'organizations', organizationId), {
-        memberUids: [...currentMemberUids, userId]
-      });
+      const orgPathToUpdate = `organizations/${organizationId}`;
+      console.log(`[firestoreService] Attempting to update document at path: ${orgPathToUpdate} (adding memberUid)`);
+      try {
+        await updateDoc(doc(db, 'organizations', organizationId), {
+          memberUids: [...currentMemberUids, userId]
+        });
+        console.log(`[firestoreService] Successfully updated organization members at path: ${orgPathToUpdate}`);
+      } catch (updateOrgError) {
+        console.error(`[firestoreService] Firestore error during updateDoc (organization members) at path: ${orgPathToUpdate}`, updateOrgError);
+        throw updateOrgError;
+      }
     }
 
     return {
@@ -152,9 +199,9 @@ export const joinOrganizationWithInviteCode = async (
       inviteCode: organizationData.inviteCode,
       createdAt: organizationData.createdAt.toDate(),
     };
-  } catch (error) {
-    console.error("Error joining organization in Firestore:", error);
-    throw error;
+  } catch (queryError) {
+    console.error(`[firestoreService] Firestore error during query for invite code in ${organizationsPath}`, queryError);
+    throw queryError;
   }
 };
 
@@ -162,39 +209,43 @@ export const getUserOrganizationDetails = async (
   userId: string
 ): Promise<{ organization: Organization; userRole: UserProfile['role'] } | null> => {
   if (!db) {
-    console.error("Firestore (db) is not initialized for getUserOrganizationDetails. Check Firebase configuration and ensure client is not offline due to rules/config.");
+    console.error("Firestore (db) is not initialized for getUserOrganizationDetails.");
     throw new Error("Firestore (db) is not initialized.");
   }
   if (!auth) {
-    console.error("Firebase Auth is not initialized for getUserOrganizationDetails. Check Firebase configuration.");
+    console.error("Firebase Auth is not initialized for getUserOrganizationDetails.");
     throw new Error("Firebase Auth is not initialized.");
   }
   if (!userId) {
-    console.warn("No userId provided to getUserOrganizationDetails");
+    console.warn("[firestoreService] No userId provided to getUserOrganizationDetails");
     return null;
   }
 
+  const userPath = `users/${userId}`;
   const userRef = doc(db, 'users', userId);
+  console.log(`[firestoreService] Attempting to get user document at path: ${userPath} (for org details)`);
   try {
     let userDoc = await getDoc(userRef);
+    console.log(`[firestoreService] Successfully got user document at path: ${userPath}. Exists: ${userDoc.exists()}`);
     
     if (!userDoc.exists()) {
-      console.log("User document not found for UID:", userId, "- Attempting to create it if current user matches.");
+      console.log(`[firestoreService] User document not found for UID: ${userId} at path ${userPath}. Attempting to create it if current user matches.`);
       const currentFirebaseUser = auth.currentUser;
       if (currentFirebaseUser && currentFirebaseUser.uid === userId) {
         try {
           await createUserDocument(currentFirebaseUser); 
           userDoc = await getDoc(userRef); 
+          console.log(`[firestoreService] Re-checked user document at path: ${userPath} after creation attempt. Exists: ${userDoc.exists()}`);
           if (!userDoc.exists()) {
-            console.error("Failed to create and retrieve user document for UID:", userId);
+            console.error(`[firestoreService] Failed to create and retrieve user document for UID: ${userId}`);
             return null; 
           }
         } catch (creationError) {
-           console.error("Error attempting to create missing user document:", creationError);
+           console.error(`[firestoreService] Error attempting to create missing user document for UID ${userId}:`, creationError);
            return null; 
         }
       } else {
-        console.warn("No authenticated user or UID mismatch, cannot create missing user document for:", userId);
+        console.warn(`[firestoreService] No authenticated user or UID mismatch for ${userId}, cannot create missing user document.`);
         return null;
       }
     }
@@ -202,48 +253,66 @@ export const getUserOrganizationDetails = async (
     const userProfile = userDoc.data() as UserProfile;
 
     if (!userProfile.organizationId) {
-      // console.log("User is not part of an organization.");
+      console.log(`[firestoreService] User ${userId} is not part of an organization.`);
       return null;
     }
 
+    const orgPath = `organizations/${userProfile.organizationId}`;
     const orgRef = doc(db, 'organizations', userProfile.organizationId);
-    const orgDoc = await getDoc(orgRef);
+    console.log(`[firestoreService] Attempting to get organization document at path: ${orgPath}`);
+    try {
+      const orgDoc = await getDoc(orgRef);
+      console.log(`[firestoreService] Successfully got organization document at path: ${orgPath}. Exists: ${orgDoc.exists()}`);
 
-    if (!orgDoc.exists()) {
-      console.warn("Organization document not found for ID:", userProfile.organizationId, "- This might indicate data inconsistency.");
-      // await updateDoc(userRef, { organizationId: null, role: null });
-      return null;
-    }
+      if (!orgDoc.exists()) {
+        console.warn(`[firestoreService] Organization document not found for ID: ${userProfile.organizationId} at path ${orgPath}. This might indicate data inconsistency.`);
+        return null;
+      }
 
-    const orgData = orgDoc.data() as Omit<Organization, 'id' | 'createdAt'> & { createdAt: Timestamp };
-    
-    return {
-      organization: {
-        id: orgDoc.id,
-        name: orgData.name,
-        ownerUid: orgData.ownerUid,
-        inviteCode: orgData.inviteCode, 
-        createdAt: orgData.createdAt.toDate(),
-      },
-      userRole: userProfile.role,
-    };
-  } catch (error) {
-    console.error("Error fetching user organization details from Firestore:", error);
-    if (error instanceof Error && (error.message.includes("firestore/permission-denied") || error.message.includes("Missing or insufficient permissions"))) {
-        console.error("Firestore permission denied. Check your Firestore security rules in the Firebase console.");
+      const orgData = orgDoc.data() as Omit<Organization, 'id' | 'createdAt'> & { createdAt: Timestamp };
+      
+      return {
+        organization: {
+          id: orgDoc.id,
+          name: orgData.name,
+          ownerUid: orgData.ownerUid,
+          inviteCode: orgData.inviteCode, 
+          createdAt: orgData.createdAt.toDate(),
+        },
+        userRole: userProfile.role,
+      };
+    } catch (getOrgError) {
+      console.error(`[firestoreService] Firestore error during getDoc for organization at path: ${orgPath}`, getOrgError);
+      throw getOrgError;
     }
-    throw error; 
+  } catch (getUserError) {
+    console.error(`[firestoreService] Firestore error during getDoc for user at path: ${userPath} (for org details)`, getUserError);
+    if (getUserError instanceof Error && (getUserError.message.includes("firestore/permission-denied") || getUserError.message.includes("Missing or insufficient permissions"))) {
+        console.error("[firestoreService] Firestore permission denied. Check your Firestore security rules in the Firebase console.");
+    }
+    throw getUserError; 
   }
 };
 
 export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
   if (!db) {
-    console.error("Firestore (db) is not initialized for getUserProfile. Check Firebase configuration and ensure client is not offline due to rules/config.");
+    console.error("Firestore (db) is not initialized for getUserProfile.");
     throw new Error("Firestore (db) is not initialized.");
   }
-  if (!userId) return null;
+  if (!userId) {
+    console.warn("[firestoreService] No userId provided to getUserProfile");
+    return null;
+  }
+  const userPath = `users/${userId}`;
   const userRef = doc(db, 'users', userId);
-  const userDoc = await getDoc(userRef);
-  return userDoc.exists() ? userDoc.data() as UserProfile : null;
+  console.log(`[firestoreService] Attempting to get user profile at path: ${userPath}`);
+  try {
+    const userDoc = await getDoc(userRef);
+    console.log(`[firestoreService] Successfully got user profile at path: ${userPath}. Exists: ${userDoc.exists()}`);
+    return userDoc.exists() ? userDoc.data() as UserProfile : null;
+  } catch (error) {
+    console.error(`[firestoreService] Firestore error during getDoc for user profile at path: ${userPath}`, error);
+    throw error;
+  }
 };
 
