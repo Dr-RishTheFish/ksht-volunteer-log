@@ -27,11 +27,17 @@ function formatDuration(startTime: Date, endTime: Date | null): string {
   const durationMs = endTime.getTime() - startTime.getTime();
   if (durationMs < 0) return 'Invalid';
 
-  const totalMinutes = Math.floor(durationMs / (1000 * 60));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
+  let remainingMs = durationMs;
 
-  return `${hours}h ${minutes}m`;
+  const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+  remainingMs %= (1000 * 60 * 60);
+
+  const minutes = Math.floor(remainingMs / (1000 * 60));
+  remainingMs %= (1000 * 60);
+
+  const seconds = Math.floor(remainingMs / 1000);
+
+  return `${hours}h ${minutes}m ${seconds}s`;
 }
 
 export function TimeLogTable({ logs }: TimeLogTableProps) {
@@ -75,9 +81,9 @@ export function TimeLogTable({ logs }: TimeLogTableProps) {
               {logs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="font-medium">{log.name}</TableCell>
-                  <TableCell>{format(log.clockIn, 'p')}</TableCell>
+                  <TableCell>{format(log.clockIn, 'pp')}</TableCell>
                   <TableCell>
-                    {log.clockOut ? format(log.clockOut, 'p') : '---'}
+                    {log.clockOut ? format(log.clockOut, 'pp') : '---'}
                   </TableCell>
                   <TableCell>{formatDuration(log.clockIn, log.clockOut)}</TableCell>
                   <TableCell>
@@ -96,3 +102,4 @@ export function TimeLogTable({ logs }: TimeLogTableProps) {
     </div>
   );
 }
+
