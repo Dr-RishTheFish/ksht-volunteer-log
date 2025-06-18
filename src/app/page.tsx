@@ -24,6 +24,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const ALL_EMPLOYEES_OPTION = "__ALL_EMPLOYEES__";
 
 export default function Home() {
   const [name, setName] = useState<string>('');
@@ -31,6 +40,7 @@ export default function Home() {
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const [selectedExportOption, setSelectedExportOption] = useState<string>(ALL_EMPLOYEES_OPTION);
 
   useEffect(() => {
     const storedLogs = localStorage.getItem('timeLogs');
@@ -122,6 +132,12 @@ export default function Home() {
       .sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
   }, [timeLogs]);
 
+  const uniqueEmployeeNamesForExport = useMemo(() => {
+    const names = new Set(todayLogs.map(log => log.name));
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [todayLogs]);
+
+
   const formatDurationForExport = (startTime: Date, endTime: Date | null): string => {
     if (!endTime) return 'In Progress';
     const durationMs = endTime.getTime() - startTime.getTime();
@@ -136,15 +152,27 @@ export default function Home() {
   };
 
   const handleExport = () => {
-    if (todayLogs.length === 0) {
+    let logsToProcess = todayLogs;
+    let fileNamePart = "All_Employees";
+
+    if (selectedExportOption !== ALL_EMPLOYEES_OPTION) {
+      logsToProcess = todayLogs.filter(log => log.name === selectedExportOption);
+      fileNamePart = selectedExportOption.replace(/\s+/g, '_');
+    } else {
+      // For "All Employees", sort alphabetically by name
+      logsToProcess = [...todayLogs].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    if (logsToProcess.length === 0) {
       toast({
         title: "No Data",
-        description: "There are no time entries for today to export.",
+        description: `There are no time entries for ${selectedExportOption === ALL_EMPLOYEES_OPTION ? 'today' : selectedExportOption} to export.`,
+        variant: "destructive",
       });
       return;
     }
 
-    const dataToExport = todayLogs.map(log => ({
+    const dataToExport = logsToProcess.map(log => ({
       'Employee Name': log.name,
       'Clock In': format(log.clockIn, 'yyyy-MM-dd HH:mm:ss'),
       'Clock Out': log.clockOut ? format(log.clockOut, 'yyyy-MM-dd HH:mm:ss') : '---',
@@ -154,20 +182,20 @@ export default function Home() {
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Today Time Logs');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Time Logs');
     
-    const todayFileName = format(new Date(), 'yyyy-MM-dd');
-    XLSX.writeFile(workbook, `TimeLogs_${todayFileName}.xlsx`);
+    const todayDateFileName = format(new Date(), 'yyyy-MM-dd');
+    XLSX.writeFile(workbook, `TimeLogs_${fileNamePart}_${todayDateFileName}.xlsx`);
     
     toast({
         title: "Export Successful",
-        description: "Today's time entries have been exported to XLSX.",
+        description: `Time entries for ${selectedExportOption === ALL_EMPLOYEES_OPTION ? 'all employees' : selectedExportOption} have been exported.`,
     });
   };
 
   const confirmClearEntries = () => {
     setTimeLogs([]);
-    localStorage.removeItem('timeLogs'); // Explicitly clear localStorage
+    localStorage.removeItem('timeLogs');
     setIsClearConfirmOpen(false);
     toast({
       title: "Entries Cleared",
@@ -255,6 +283,23 @@ export default function Home() {
           <CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Integrations</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="export-select">Select Employee to Export</Label>
+            <Select value={selectedExportOption} onValueChange={setSelectedExportOption}>
+              <SelectTrigger id="export-select" className="w-full">
+                <SelectValue placeholder="Select an option" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_EMPLOYEES_OPTION}>All Employees</SelectItem>
+                {uniqueEmployeeNamesForExport.map(empName => (
+                  <SelectItem key={empName} value={empName}>
+                    {empName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <Button
             onClick={handleExport}
             variant="outline"
@@ -301,3 +346,4 @@ export default function Home() {
     </main>
   );
 }
+
