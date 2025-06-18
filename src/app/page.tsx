@@ -6,11 +6,11 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2 } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2 } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
 import {
@@ -31,38 +31,132 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
 const ALL_EMPLOYEES_OPTION = "__ALL_EMPLOYEES__";
 
+// Placeholder Organization Setup Components
+function CreateOrganizationForm({ onOrganizationCreated }: { onOrganizationCreated: () => void }) {
+  const [orgName, setOrgName] = useState('');
+  const { toast } = useToast();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orgName.trim()) {
+      toast({ title: 'Error', description: 'Organization name cannot be empty.', variant: 'destructive' });
+      return;
+    }
+    // Placeholder: In a real app, you'd save this to Firestore
+    console.log("Creating organization:", orgName);
+    toast({ title: 'Success', description: `Organization "${orgName}" created (simulated).` });
+    onOrganizationCreated();
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="orgName">Organization Name</Label>
+        <Input
+          id="orgName"
+          value={orgName}
+          onChange={(e) => setOrgName(e.target.value)}
+          placeholder="Your Company Inc."
+          className="mt-1"
+        />
+      </div>
+      <Button type="submit" className="w-full">Create Organization</Button>
+    </form>
+  );
+}
+
+function JoinOrganizationForm({ onOrganizationJoined }: { onOrganizationJoined: () => void }) {
+  const [inviteCode, setInviteCode] = useState('');
+  const { toast } = useToast();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteCode.trim()) {
+      toast({ title: 'Error', description: 'Invite code cannot be empty.', variant: 'destructive' });
+      return;
+    }
+    // Placeholder: In a real app, you'd validate this code and update user's org in Firestore
+    console.log("Joining organization with code:", inviteCode);
+    toast({ title: 'Success', description: `Joined organization with code "${inviteCode}" (simulated).` });
+    onOrganizationJoined();
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="inviteCode">Invite Code</Label>
+        <Input
+          id="inviteCode"
+          value={inviteCode}
+          onChange={(e) => setInviteCode(e.target.value)}
+          placeholder="Enter invite code"
+          className="mt-1"
+        />
+      </div>
+      <Button type="submit" className="w-full">Join Organization</Button>
+    </form>
+  );
+}
+
+
 export default function Home() {
-  const [name, setName] = useState<string>('');
+  const { user, loading, logout } = useAuth();
+  const router = useRouter();
+
+  const [name, setName] = useState<string>(''); // Employee name for clocking in/out
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [selectedExportOption, setSelectedExportOption] = useState<string>(ALL_EMPLOYEES_OPTION);
 
-  useEffect(() => {
-    const storedLogs = localStorage.getItem('timeLogs');
-    if (storedLogs) {
-      try {
-        const parsedLogs = JSON.parse(storedLogs, (key, value) => {
-          if (key === 'clockIn' || key === 'clockOut') {
-            return value ? new Date(value) : null;
-          }
-          return value;
-        }) as TimeLogEntry[];
-        setTimeLogs(parsedLogs);
-      } catch (error) {
-        console.error("Failed to parse logs from localStorage", error);
-        localStorage.removeItem('timeLogs');
-      }
-    }
-  }, []);
+  // Organization state: 'unknown', 'needsSetup', 'member'
+  const [organizationStatus, setOrganizationStatus] = useState<'unknown' | 'needsSetup' | 'member'>('unknown');
+  const [showCreateOrgForm, setShowCreateOrgForm] = useState(false);
+  const [showJoinOrgForm, setShowJoinOrgForm] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('timeLogs', JSON.stringify(timeLogs));
-  }, [timeLogs]);
+    if (!loading && !user) {
+      router.push('/login');
+    } else if (user && organizationStatus === 'unknown') {
+      // Simulate checking if user belongs to an organization.
+      // For now, assume every new login/signup needs setup.
+      // In a real app, this would check Firestore for user.organizationId
+      setOrganizationStatus('needsSetup');
+    }
+  }, [user, loading, router, organizationStatus]);
+  
+  useEffect(() => {
+    if (user && organizationStatus === 'member') {
+      // Load time logs if user is authenticated and part of an org
+      const storedLogs = localStorage.getItem('timeLogs');
+      if (storedLogs) {
+        try {
+          const parsedLogs = JSON.parse(storedLogs, (key, value) => {
+            if (key === 'clockIn' || key === 'clockOut') {
+              return value ? new Date(value) : null;
+            }
+            return value;
+          }) as TimeLogEntry[];
+          setTimeLogs(parsedLogs);
+        } catch (error) {
+          console.error("Failed to parse logs from localStorage", error);
+          localStorage.removeItem('timeLogs');
+        }
+      }
+    }
+  }, [user, organizationStatus]);
+
+  useEffect(() => {
+    if (organizationStatus === 'member') {
+      localStorage.setItem('timeLogs', JSON.stringify(timeLogs));
+    }
+  }, [timeLogs, organizationStatus]);
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -74,10 +168,10 @@ export default function Home() {
   }, []);
 
   const isCurrentUserClockedIn = useMemo(() => {
-    if (!name) return false;
+    if (!name || organizationStatus !== 'member') return false;
     const todayDateStr = format(new Date(), 'yyyy-MM-dd');
     return timeLogs.some(log => log.name === name && log.clockOut === null && log.date === todayDateStr);
-  }, [name, timeLogs]);
+  }, [name, timeLogs, organizationStatus]);
 
   const handleClockIn = () => {
     if (!name.trim()) {
@@ -126,11 +220,12 @@ export default function Home() {
   };
 
   const todayLogs = useMemo(() => {
+    if (organizationStatus !== 'member') return [];
     const todayDateStr = format(new Date(), 'yyyy-MM-dd');
     return timeLogs
       .filter(log => log.date === todayDateStr)
       .sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
-  }, [timeLogs]);
+  }, [timeLogs, organizationStatus]);
 
   const uniqueEmployeeNamesForExport = useMemo(() => {
     const names = new Set(todayLogs.map(log => log.name));
@@ -159,7 +254,6 @@ export default function Home() {
       logsToProcess = todayLogs.filter(log => log.name === selectedExportOption);
       fileNamePart = selectedExportOption.replace(/\s+/g, '_');
     } else {
-      // For "All Employees", sort alphabetically by name
       logsToProcess = [...todayLogs].sort((a, b) => a.name.localeCompare(b.name));
     }
 
@@ -203,31 +297,107 @@ export default function Home() {
     });
   };
 
-  return (
-    <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
-      <div className="text-center space-y-4 w-full max-w-2xl">
+  if (loading || (!user && organizationStatus === 'unknown')) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-secondary/10">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </main>
+    );
+  }
+
+  if (!user) {
+    // This case should ideally be handled by the useEffect redirect,
+    // but as a fallback:
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <p>Redirecting to login...</p>
+      </main>
+    );
+  }
+  
+  const commonHeader = (
+    <div className="text-center space-y-4 w-full max-w-2xl mb-8">
+      <div className="flex justify-between items-center w-full">
         <Image
           src="/Stickers.png"
           alt="Big Brainbox Logo"
-          width={100}
-          height={100}
-          className="mx-auto rounded-full shadow-lg"
+          width={80}
+          height={80}
+          className="rounded-full shadow-lg"
+          data-ai-hint="logo company"
         />
-        <h1 className="text-4xl sm:text-5xl font-bold">
-          <span className="bg-gradient-to-r from-primary to-accent text-transparent bg-clip-text">
-            Big Brainbox Time Clock
-          </span>
-        </h1>
-        <p className="text-lg sm:text-xl text-muted-foreground">
-          Professional time tracking with cloud sync
-        </p>
-        {currentDateTime && (
-          <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg">
-            <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6" />
-            <span>{currentDateTime}</span>
-          </div>
-        )}
+        <Button onClick={logout} variant="outline" size="sm">
+          <LogOut className="mr-2 h-4 w-4" /> Logout
+        </Button>
       </div>
+      <h1 className="text-4xl sm:text-5xl font-bold">
+        <span className="bg-gradient-to-r from-primary to-accent text-transparent bg-clip-text">
+          Big Brainbox Time Clock
+        </span>
+      </h1>
+      {organizationStatus === 'member' && (
+        <>
+          <p className="text-lg sm:text-xl text-muted-foreground">
+            Professional time tracking for your organization.
+          </p>
+          {currentDateTime && (
+            <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg">
+              <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6" />
+              <span>{currentDateTime}</span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  if (organizationStatus === 'needsSetup') {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
+        {commonHeader}
+        <Card className="w-full max-w-md shadow-xl rounded-xl">
+          <CardHeader>
+            <CardTitle className="text-xl sm:text-2xl font-semibold">Organization Setup</CardTitle>
+            <CardDescription>
+              {showCreateOrgForm || showJoinOrgForm 
+                ? "Complete the form below." 
+                : "You need to create or join an organization to use the time clock."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!showCreateOrgForm && !showJoinOrgForm && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button onClick={() => { setShowCreateOrgForm(true); setShowJoinOrgForm(false); }} variant="default" size="lg">
+                  <Building className="mr-2 h-5 w-5" /> Create Organization
+                </Button>
+                <Button onClick={() => { setShowJoinOrgForm(true); setShowCreateOrgForm(false); }} variant="outline" size="lg">
+                  <Users className="mr-2 h-5 w-5" /> Join Organization
+                </Button>
+              </div>
+            )}
+            {showCreateOrgForm && (
+              <>
+                <CreateOrganizationForm onOrganizationCreated={() => setOrganizationStatus('member')} />
+                <Button variant="link" onClick={() => { setShowCreateOrgForm(false);}} className="w-full">Back to options</Button>
+              </>
+            )}
+            {showJoinOrgForm && (
+              <>
+                <JoinOrganizationForm onOrganizationJoined={() => setOrganizationStatus('member')} />
+                <Button variant="link" onClick={() => { setShowJoinOrgForm(false);}} className="w-full">Back to options</Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+
+  // organizationStatus === 'member'
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
+      {commonHeader}
 
       <Card className="w-full max-w-md shadow-xl rounded-xl">
         <CardHeader className="pb-4">
@@ -238,11 +408,11 @@ export default function Home() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Employee Name</Label>
+            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Employee Name (Your Name: {user?.displayName || user?.email})</Label>
             <Input
               id="name"
               type="text"
-              placeholder="Enter your full name"
+              placeholder="Enter your full name for this entry"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary"
@@ -280,7 +450,7 @@ export default function Home() {
 
       <Card className="w-full max-w-2xl shadow-xl rounded-xl">
         <CardHeader>
-          <CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Integrations</CardTitle>
+          <CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Data Management</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -311,7 +481,7 @@ export default function Home() {
           <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" className="w-full">
-                <Trash2 className="mr-2 h-5 w-5" /> Clear All Entries
+                <Trash2 className="mr-2 h-5 w-5" /> Clear All Entries (Local)
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -319,7 +489,7 @@ export default function Home() {
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This action cannot be undone. This will permanently delete all
-                  time log entries from your browser.
+                  time log entries from your browser&apos;s local storage.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -338,7 +508,7 @@ export default function Home() {
               </div>
               SharePoint and OneDrive real-time sync coming soon!
               <br />
-              This feature requires additional server-side setup and configuration.
+              This feature requires additional server-side setup and database integration.
           </div>
         </CardContent>
       </Card>
@@ -346,4 +516,3 @@ export default function Home() {
     </main>
   );
 }
-
