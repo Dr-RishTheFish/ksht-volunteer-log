@@ -10,14 +10,27 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Share2, UploadCloud } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2 } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
+import * as XLSX from 'xlsx';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Home() {
   const [name, setName] = useState<string>('');
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
 
   useEffect(() => {
     const storedLogs = localStorage.getItem('timeLogs');
@@ -109,12 +122,57 @@ export default function Home() {
       .sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
   }, [timeLogs]);
 
+  const formatDurationForExport = (startTime: Date, endTime: Date | null): string => {
+    if (!endTime) return 'In Progress';
+    const durationMs = endTime.getTime() - startTime.getTime();
+    if (durationMs < 0) return 'Invalid';
+    let remainingMs = durationMs;
+    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+    remainingMs %= (1000 * 60 * 60);
+    const minutes = Math.floor(remainingMs / (1000 * 60));
+    remainingMs %= (1000 * 60);
+    const seconds = Math.floor(remainingMs / 1000);
+    return `${hours}h ${minutes}m ${seconds}s`;
+  };
+
   const handleExport = () => {
+    if (todayLogs.length === 0) {
+      toast({
+        title: "No Data",
+        description: "There are no time entries for today to export.",
+      });
+      return;
+    }
+
+    const dataToExport = todayLogs.map(log => ({
+      'Employee Name': log.name,
+      'Clock In': format(log.clockIn, 'yyyy-MM-dd HH:mm:ss'),
+      'Clock Out': log.clockOut ? format(log.clockOut, 'yyyy-MM-dd HH:mm:ss') : '---',
+      'Duration': formatDurationForExport(log.clockIn, log.clockOut),
+      'Status': log.clockOut ? 'Completed' : 'In Progress',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Today Time Logs');
+    
+    const todayFileName = format(new Date(), 'yyyy-MM-dd');
+    XLSX.writeFile(workbook, `TimeLogs_${todayFileName}.xlsx`);
+    
     toast({
-        title: "Export Timesheet",
-        description: "XLSX export functionality is coming soon!",
+        title: "Export Successful",
+        description: "Today's time entries have been exported to XLSX.",
     });
-    console.log("Exporting timesheet:", todayLogs);
+  };
+
+  const confirmClearEntries = () => {
+    setTimeLogs([]);
+    localStorage.removeItem('timeLogs'); // Explicitly clear localStorage
+    setIsClearConfirmOpen(false);
+    toast({
+      title: "Entries Cleared",
+      description: "All time entries have been successfully cleared.",
+    });
   };
 
   return (
@@ -168,7 +226,7 @@ export default function Home() {
               onClick={handleClockIn}
               disabled={!name.trim() || isCurrentUserClockedIn}
               size="lg"
-              className="text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out"
+              className="text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out bg-primary hover:bg-primary/90 text-primary-foreground"
               aria-label="Clock In"
             >
               <ArrowRightToLine className="mr-2 h-5 w-5" /> Clock In
@@ -204,6 +262,30 @@ export default function Home() {
           >
             <Download className="mr-2 h-5 w-5" /> Export to XLSX
           </Button>
+
+          <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" className="w-full">
+                <Trash2 className="mr-2 h-5 w-5" /> Clear All Entries
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete all
+                  time log entries from your browser.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setIsClearConfirmOpen(false)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmClearEntries}>
+                  Yes, clear entries
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
           <div className="text-sm text-muted-foreground text-center p-4 border border-dashed rounded-md bg-secondary/30">
               <div className="flex items-center justify-center gap-2 mb-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline><path d="M15.5 22.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"></path><path d="M15.5 17.5v-1.5a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1.5"></path></svg>
@@ -219,4 +301,3 @@ export default function Home() {
     </main>
   );
 }
-
