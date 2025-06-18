@@ -1,6 +1,6 @@
 
 import { db, auth } from './config';
-import { doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp, Timestamp, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp, Timestamp, updateDoc, arrayUnion } from 'firebase/firestore';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { UserProfile } from '@/interfaces/User';
 import type { Organization } from '@/interfaces/Organization';
@@ -177,20 +177,20 @@ export const joinOrganizationWithInviteCode = async (
     }
     
 
-    const currentMemberUids = organizationData.memberUids || [];
-    if (!currentMemberUids.includes(userId)) {
-      const orgPathToUpdate = `organizations/${organizationId}`;
-      console.log(`[firestoreService] Attempting to update document at path: ${orgPathToUpdate} (adding memberUid)`);
-      try {
-        await updateDoc(doc(db, 'organizations', organizationId), {
-          memberUids: [...currentMemberUids, userId]
-        });
-        console.log(`[firestoreService] Successfully updated organization members at path: ${orgPathToUpdate}`);
-      } catch (updateOrgError) {
-        console.error(`[firestoreService] Firestore error during updateDoc (organization members) at path: ${orgPathToUpdate}`, updateOrgError);
-        throw updateOrgError;
-      }
+    // const currentMemberUids = organizationData.memberUids || [];
+    // if (!currentMemberUids.includes(userId)) {
+    const orgDocRefToUpdate = doc(db, 'organizations', organizationId);
+    console.log(`[firestoreService] Attempting to update document at path: organizations/${organizationId} (adding memberUid)`);
+    try {
+      await updateDoc(orgDocRefToUpdate, {
+        memberUids: arrayUnion(userId)
+      });
+      console.log(`[firestoreService] Successfully updated organization members at path: organizations/${organizationId}`);
+    } catch (updateOrgError) {
+      console.error(`[firestoreService] Firestore error during updateDoc (organization members) at path: organizations/${organizationId}`, updateOrgError);
+      throw updateOrgError;
     }
+    // }
 
     return {
       id: organizationId,
@@ -266,6 +266,8 @@ export const getUserOrganizationDetails = async (
 
       if (!orgDoc.exists()) {
         console.warn(`[firestoreService] Organization document not found for ID: ${userProfile.organizationId} at path ${orgPath}. This might indicate data inconsistency.`);
+        // Optionally, clear user's orgId if the org doc is missing
+        // await updateDoc(userRef, { organizationId: null, role: null });
         return null;
       }
 
@@ -283,12 +285,15 @@ export const getUserOrganizationDetails = async (
       };
     } catch (getOrgError) {
       console.error(`[firestoreService] Firestore error during getDoc for organization at path: ${orgPath}`, getOrgError);
+      if (getOrgError instanceof Error && (getOrgError.message.includes("firestore/permission-denied") || getOrgError.message.includes("firestore/permission-denied") || getOrgError.message.includes("Missing or insufficient permissions"))) {
+        console.error("[firestoreService] Firestore permission denied when fetching organization. Check your Firestore security rules in the Firebase console.");
+      }
       throw getOrgError;
     }
   } catch (getUserError) {
     console.error(`[firestoreService] Firestore error during getDoc for user at path: ${userPath} (for org details)`, getUserError);
     if (getUserError instanceof Error && (getUserError.message.includes("firestore/permission-denied") || getUserError.message.includes("Missing or insufficient permissions"))) {
-        console.error("[firestoreService] Firestore permission denied. Check your Firestore security rules in the Firebase console.");
+        console.error("[firestoreService] Firestore permission denied when fetching user. Check your Firestore security rules in the Firebase console.");
     }
     throw getUserError; 
   }
@@ -316,3 +321,25 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
   }
 };
 
+export const addMemberToOrganization = async (orgId: string, userId: string): Promise<void> => {
+    if (!db) {
+        console.error("Firestore (db) is not initialized for addMemberToOrganization.");
+        throw new Error("Firestore (db) is not initialized.");
+    }
+    if (!orgId || !userId) {
+        console.error("Missing orgId or userId for adding member to organization.");
+        throw new Error("Missing orgId or userId.");
+    }
+
+    const orgRef = doc(db, 'organizations', orgId);
+    console.log(`[firestoreService] Attempting to add member ${userId} to organization ${orgId}`);
+    try {
+        await updateDoc(orgRef, {
+            memberUids: arrayUnion(userId)
+        });
+        console.log(`[firestoreService] Successfully added member ${userId} to organization ${orgId}`);
+    } catch (error) {
+        console.error(`[firestoreService] Error adding member ${userId} to organization ${orgId}:`, error);
+        throw error;
+    }
+};
