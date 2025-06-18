@@ -15,9 +15,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { useState, useEffect } from 'react';
+import type { UserProfile } from '@/interfaces/User';
 
 interface TimeLogTableProps {
   logs: TimeLogEntry[];
+  currentUserName?: string; 
+  userRole?: UserProfile['role']; 
 }
 
 function formatDuration(startTime: Date, endTime: Date | null): string {
@@ -40,7 +43,7 @@ function formatDuration(startTime: Date, endTime: Date | null): string {
   return `${hours}h ${minutes}m ${seconds}s`;
 }
 
-export function TimeLogTable({ logs }: TimeLogTableProps) {
+export function TimeLogTable({ logs, userRole, currentUserName }: TimeLogTableProps) {
   const [todayDateFormatted, setTodayDateFormatted] = useState<string | null>(null);
   const entryCount = logs.length;
 
@@ -48,26 +51,30 @@ export function TimeLogTable({ logs }: TimeLogTableProps) {
     setTodayDateFormatted(format(new Date(), 'M/d/yyyy'));
   }, []);
 
+  const captionText = userRole === 'member' ? 
+    `A list of your time logs for today.` :
+    `A list of today's time logs for the organization.`;
+
   return (
     <div className="w-full">
-      <div className="mb-4">
-        <h2 className="text-xl sm:text-2xl font-semibold">Today's Time Entries</h2>
-        {todayDateFormatted ? (
-          <p className="text-sm text-muted-foreground">
-            {entryCount} {entryCount === 1 ? "entry" : "entries"} for {todayDateFormatted}
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {entryCount} {entryCount === 1 ? "entry" : "entries"} for ...
-          </p>
-        )}
-      </div>
+      {todayDateFormatted ? (
+        <p className="text-sm text-muted-foreground mb-4">
+          {entryCount} {entryCount === 1 ? "entry" : "entries"} for {todayDateFormatted}
+          {userRole === 'member' && currentUserName ? ` (showing only for ${currentUserName})` : ''}
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground mb-4">
+          {entryCount} {entryCount === 1 ? "entry" : "entries"}
+        </p>
+      )}
       {logs.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">No time logs for today yet.</p>
+        <p className="text-center text-muted-foreground py-8">
+          {userRole === 'member' ? 'You have no time logs for today yet.' : 'No time logs for today yet.'}
+        </p>
       ) : (
         <ScrollArea className="h-[300px] rounded-md border">
           <Table>
-            <TableCaption>A list of today's time logs.</TableCaption>
+            <TableCaption>{captionText}</TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead>Employee</TableHead>
@@ -79,7 +86,7 @@ export function TimeLogTable({ logs }: TimeLogTableProps) {
             </TableHeader>
             <TableBody>
               {logs.map((log) => (
-                <TableRow key={log.id}>
+                <TableRow key={log.id} className={log.name === currentUserName && userRole === 'member' ? 'bg-primary/10' : ''}>
                   <TableCell className="font-medium">{log.name}</TableCell>
                   <TableCell>{format(log.clockIn, 'pp')}</TableCell>
                   <TableCell>
@@ -103,3 +110,4 @@ export function TimeLogTable({ logs }: TimeLogTableProps) {
   );
 }
 
+    

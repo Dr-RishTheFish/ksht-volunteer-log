@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy, Settings } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
 import {
@@ -33,20 +33,20 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { createOrganizationWithInviteCode, joinOrganizationWithInviteCode, getUserOrganizationDetails } from '@/lib/firebase/firestoreService';
+import { createOrganizationWithInviteCode, joinOrganizationWithInviteCode, getUserOrganizationDetails, getUserProfile } from '@/lib/firebase/firestoreService';
 import type { Organization } from '@/interfaces/Organization';
 import type { UserProfile } from '@/interfaces/User';
 
 
 const ALL_EMPLOYEES_OPTION = "__ALL_EMPLOYEES__";
 
-function CreateOrganizationForm({ 
-  onOrganizationCreated, 
+function CreateOrganizationForm({
+  onOrganizationCreated,
   onBack,
-  userId 
-}: { 
-  onOrganizationCreated: (org: Organization, inviteCode: string) => void; 
-  onBack: () => void; 
+  userId
+}: {
+  onOrganizationCreated: (org: Organization, inviteCode: string) => void;
+  onBack: () => void;
   userId: string;
 }) {
   const [orgName, setOrgName] = useState('');
@@ -84,24 +84,26 @@ function CreateOrganizationForm({
           disabled={isCreating}
         />
       </div>
-      <Button type="submit" className="w-full" disabled={isCreating}>
-        {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-        {isCreating ? 'Creating...' : 'Create Organization'}
-      </Button>
-      <Button type="button" variant="link" onClick={onBack} className="w-full mt-2" disabled={isCreating}>
-        Back to options
-      </Button>
+      <div className="flex flex-col space-y-2">
+        <Button type="submit" className="w-full" disabled={isCreating}>
+          {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {isCreating ? 'Creating...' : 'Create Organization'}
+        </Button>
+        <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isCreating}>
+          Go back to organization options
+        </Button>
+      </div>
     </form>
   );
 }
 
-function JoinOrganizationForm({ 
-  onOrganizationJoined, 
+function JoinOrganizationForm({
+  onOrganizationJoined,
   onBack,
   userId
-}: { 
-  onOrganizationJoined: (org: Organization) => void; 
-  onBack: () => void; 
+}: {
+  onOrganizationJoined: (org: Organization) => void;
+  onBack: () => void;
   userId: string;
 }) {
   const [inviteCode, setInviteCode] = useState('');
@@ -143,13 +145,15 @@ function JoinOrganizationForm({
           disabled={isJoining}
         />
       </div>
-      <Button type="submit" className="w-full" disabled={isJoining}>
-        {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-        {isJoining ? 'Joining...' : 'Join Organization'}
-      </Button>
-      <Button type="button" variant="link" onClick={onBack} className="w-full mt-2" disabled={isJoining}>
-        Back to options
-      </Button>
+      <div className="flex flex-col space-y-2">
+        <Button type="submit" className="w-full" disabled={isJoining}>
+          {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {isJoining ? 'Joining...' : 'Join Organization'}
+        </Button>
+        <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isJoining}>
+          Go back to organization options
+        </Button>
+      </div>
     </form>
   );
 }
@@ -159,7 +163,7 @@ export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
 
-  const [name, setName] = useState<string>(''); 
+  const [currentUserName, setCurrentUserName] = useState<string>('');
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
@@ -169,12 +173,11 @@ export default function Home() {
   const [organizationStatus, setOrganizationStatus] = useState<'unknown' | 'needsSetup' | 'member' | 'loading'>('loading');
   const [organizationDetails, setOrganizationDetails] = useState<Organization | null>(null);
   const [userRole, setUserRole] = useState<UserProfile['role']>(null);
-  
+
   const [showCreateOrgForm, setShowCreateOrgForm] = useState(false);
   const [showJoinOrgForm, setShowJoinOrgForm] = useState(false);
-  const [showInviteCodeSection, setShowInviteCodeSection] = useState(false);
-  const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
 
+  const [showInviteCodeCreatedCard, setShowInviteCodeCreatedCard] = useState(false);
 
   useEffect(() => {
     if (authLoading) {
@@ -186,31 +189,31 @@ export default function Home() {
       return;
     }
 
-    // User is authenticated, check their organization status
-    setOrganizationStatus('loading'); // Set to loading while fetching
+    setOrganizationStatus('loading');
     getUserOrganizationDetails(user.uid)
-      .then(orgData => {
-        if (orgData) {
-          setOrganizationDetails(orgData.organization);
-          setUserRole(orgData.userRole);
+      .then(orgAndUserData => {
+        if (orgAndUserData?.organization) {
+          setOrganizationDetails(orgAndUserData.organization);
+          setUserRole(orgAndUserData.userRole);
+          setCurrentUserName(orgAndUserData.userDisplayName || user.email?.split('@')[0] || 'User');
           setOrganizationStatus('member');
-          if (orgData.userRole === 'owner' && orgData.organization.inviteCode) {
-             // If they just created it or are the owner, show invite code section
-             setGeneratedInviteCode(orgData.organization.inviteCode);
-             setShowInviteCodeSection(true);
-          }
         } else {
+          // User might exist but not be in an org, or orgData is null due to an issue
+          setCurrentUserName(orgAndUserData?.userDisplayName || user.displayName || user.email?.split('@')[0] || 'User');
           setOrganizationStatus('needsSetup');
+          setShowCreateOrgForm(false);
+          setShowJoinOrgForm(false);
         }
       })
       .catch(error => {
-        console.error("Error fetching organization details:", error);
-        toast({ title: 'Error', description: 'Could not fetch organization details.', variant: 'destructive'});
-        setOrganizationStatus('needsSetup'); // Fallback to needsSetup on error
+        console.error("Error fetching organization or user details:", error);
+        toast({ title: 'Error', description: 'Could not fetch your details. Please try refreshing.', variant: 'destructive'});
+        setCurrentUserName(user.displayName || user.email?.split('@')[0] || 'User'); // Fallback name
+        setOrganizationStatus('needsSetup');
       });
 
   }, [user, authLoading, router, toast]);
-  
+
   useEffect(() => {
     if (user && organizationStatus === 'member') {
       const storedLogs = localStorage.getItem('timeLogs');
@@ -228,9 +231,6 @@ export default function Home() {
           localStorage.removeItem('timeLogs');
         }
       }
-      // Set default name for clocking in/out if user is available
-      setName(user.displayName || user.email || '');
-
     }
   }, [user, organizationStatus]);
 
@@ -250,24 +250,24 @@ export default function Home() {
   }, []);
 
   const isCurrentUserClockedIn = useMemo(() => {
-    if (!name || organizationStatus !== 'member') return false;
+    if (!currentUserName || organizationStatus !== 'member') return false;
     const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-    return timeLogs.some(log => log.name === name && log.clockOut === null && log.date === todayDateStr);
-  }, [name, timeLogs, organizationStatus]);
+    return timeLogs.some(log => log.name === currentUserName && log.clockOut === null && log.date === todayDateStr);
+  }, [currentUserName, timeLogs, organizationStatus]);
 
   const handleClockIn = () => {
-    if (!name.trim()) {
-      toast({ title: 'Error', description: 'Please enter your name.', variant: 'destructive' });
+    if (!currentUserName.trim()) {
+      toast({ title: 'Error', description: 'Your name is not set for clocking in.', variant: 'destructive' });
       return;
     }
     if (isCurrentUserClockedIn) {
-      toast({ title: 'Error', description: `${name} is already clocked in for today.`, variant: 'destructive' });
+      toast({ title: 'Error', description: `${currentUserName} is already clocked in for today.`, variant: 'destructive' });
       return;
     }
 
     const newLog: TimeLogEntry = {
       id: crypto.randomUUID(),
-      name: name.trim(),
+      name: currentUserName.trim(),
       clockIn: new Date(),
       clockOut: null,
       date: format(new Date(), 'yyyy-MM-dd'),
@@ -276,12 +276,12 @@ export default function Home() {
   };
 
   const handleClockOut = () => {
-    if (!name.trim()) {
-      toast({ title: 'Error', description: 'Please enter your name to clock out.', variant: 'destructive' });
+    if (!currentUserName.trim()) {
+      toast({ title: 'Error', description: 'Your name is not set for clocking out.', variant: 'destructive' });
       return;
     }
     if (!isCurrentUserClockedIn) {
-      toast({ title: 'Error', description: `${name} is not clocked in for today.`, variant: 'destructive' });
+      toast({ title: 'Error', description: `${currentUserName} is not clocked in for today.`, variant: 'destructive' });
       return;
     }
 
@@ -289,7 +289,7 @@ export default function Home() {
       const newLogs = [...prevLogs];
       const todayDateStr = format(new Date(), 'yyyy-MM-dd');
       const logIndex = newLogs.findLastIndex(
-        (log) => log.name === name.trim() && log.clockOut === null && log.date === todayDateStr
+        (log) => log.name === currentUserName.trim() && log.clockOut === null && log.date === todayDateStr
       );
 
       if (logIndex !== -1) {
@@ -304,15 +304,30 @@ export default function Home() {
   const todayLogs = useMemo(() => {
     if (organizationStatus !== 'member') return [];
     const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-    return timeLogs
-      .filter(log => log.date === todayDateStr)
-      .sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
-  }, [timeLogs, organizationStatus]);
+    let logs = timeLogs.filter(log => log.date === todayDateStr);
+
+    if (userRole === 'member' && currentUserName) {
+      logs = logs.filter(log => log.name === currentUserName);
+    }
+    // For owners, all logs for the day are already included
+
+    return logs.sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
+  }, [timeLogs, organizationStatus, userRole, currentUserName]);
 
   const uniqueEmployeeNamesForExport = useMemo(() => {
-    const names = new Set(todayLogs.map(log => log.name));
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [todayLogs]);
+    // For owners, get names from all today's logs (across the org from localStorage)
+    // For members, this list will effectively be just their name due to how `handleExport` logic is structured
+    if (userRole === 'owner') {
+      const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+      const names = new Set(timeLogs.filter(log => log.date === todayDateStr).map(log => log.name));
+      return Array.from(names).sort((a, b) => a.localeCompare(b));
+    }
+    // For members, they can only export their own, so only their name is relevant if they have logs
+    if (currentUserName && timeLogs.some(log => log.name === currentUserName && log.date === format(new Date(), 'yyyy-MM-dd'))) {
+      return [currentUserName];
+    }
+    return [];
+  }, [timeLogs, userRole, currentUserName]);
 
 
   const formatDurationForExport = (startTime: Date, endTime: Date | null): string => {
@@ -329,20 +344,32 @@ export default function Home() {
   };
 
   const handleExport = () => {
-    let logsToProcess = todayLogs;
-    let fileNamePart = "All_Employees";
+    let logsToProcess: TimeLogEntry[];
+    let fileNamePart: string;
+    const allTodayLogsFromStorage = timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd'));
 
-    if (selectedExportOption !== ALL_EMPLOYEES_OPTION) {
-      logsToProcess = todayLogs.filter(log => log.name === selectedExportOption);
-      fileNamePart = selectedExportOption.replace(/\s+/g, '_');
+    if (userRole === 'member' && currentUserName) {
+        logsToProcess = allTodayLogsFromStorage.filter(log => log.name === currentUserName);
+        fileNamePart = currentUserName.replace(/\s+/g, '_');
+    } else if (userRole === 'owner') {
+        if (selectedExportOption === ALL_EMPLOYEES_OPTION) {
+            logsToProcess = [...allTodayLogsFromStorage].sort((a, b) => a.name.localeCompare(b.name));
+            fileNamePart = "All_Employees";
+        } else {
+            logsToProcess = allTodayLogsFromStorage.filter(log => log.name === selectedExportOption);
+            fileNamePart = selectedExportOption.replace(/\s+/g, '_');
+        }
     } else {
-      logsToProcess = [...todayLogs].sort((a, b) => a.name.localeCompare(b.name));
+        toast({ title: "Error", description: "Cannot determine export scope. User role or name missing.", variant: "destructive" });
+        return;
     }
 
     if (logsToProcess.length === 0) {
+      const forWhom = userRole === 'member' ? currentUserName :
+                      (selectedExportOption === ALL_EMPLOYEES_OPTION ? 'today' : selectedExportOption);
       toast({
         title: "No Data",
-        description: `There are no time entries for ${selectedExportOption === ALL_EMPLOYEES_OPTION ? 'today' : selectedExportOption} to export.`,
+        description: `There are no time entries for ${forWhom} to export.`,
         variant: "destructive",
       });
       return;
@@ -359,32 +386,58 @@ export default function Home() {
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Time Logs');
-    
+
     const todayDateFileName = format(new Date(), 'yyyy-MM-dd');
     XLSX.writeFile(workbook, `TimeLogs_${fileNamePart}_${todayDateFileName}.xlsx`);
-    
+
+    const exportedForWhom = userRole === 'member' ? currentUserName :
+                           (selectedExportOption === ALL_EMPLOYEES_OPTION ? 'all employees' : selectedExportOption);
     toast({
         title: "Export Successful",
-        description: `Time entries for ${selectedExportOption === ALL_EMPLOYEES_OPTION ? 'all employees' : selectedExportOption} have been exported.`,
+        description: `Time entries for ${exportedForWhom} have been exported.`,
     });
   };
 
   const confirmClearEntries = () => {
-    setTimeLogs([]);
-    localStorage.removeItem('timeLogs');
+    let initialLength = timeLogs.length;
+    let clearedCount = 0;
+
+    if (userRole === 'member' && currentUserName) {
+      const logsToKeep = timeLogs.filter(log => log.name !== currentUserName);
+      clearedCount = initialLength - logsToKeep.length;
+      setTimeLogs(logsToKeep);
+    } else if (userRole === 'owner') {
+      clearedCount = initialLength;
+      setTimeLogs([]);
+    } else {
+      toast({ title: "Error", description: "Cannot determine clear scope.", variant: "destructive" });
+      setIsClearConfirmOpen(false);
+      return;
+    }
     setIsClearConfirmOpen(false);
     toast({
       title: "Entries Cleared",
-      description: "All time entries have been successfully cleared.",
+      description: userRole === 'member' ? `Your ${clearedCount} time entr${clearedCount === 1 ? 'y has' : 'ies have'} been cleared.` : `${clearedCount} time entr${clearedCount === 1 ? 'y has' : 'ies have'} been successfully cleared.`,
     });
   };
 
+
   const handleCopyInviteCode = () => {
-    if (generatedInviteCode) {
-      navigator.clipboard.writeText(generatedInviteCode)
+    if (organizationDetails?.inviteCode) {
+      navigator.clipboard.writeText(organizationDetails.inviteCode)
         .then(() => toast({ title: "Copied!", description: "Invite code copied to clipboard." }))
         .catch(() => toast({ title: "Error", description: "Could not copy invite code.", variant: "destructive" }));
     }
+  };
+
+  const handleReturnToOrgSetup = () => {
+    setOrganizationStatus('needsSetup');
+    setOrganizationDetails(null);
+    setUserRole(null);
+    setShowCreateOrgForm(false);
+    setShowJoinOrgForm(false);
+    setShowInviteCodeCreatedCard(false);
+    // currentUserName will be re-fetched or fallback if user details are missing
   };
 
   if (organizationStatus === 'loading' || authLoading) {
@@ -396,19 +449,18 @@ export default function Home() {
   }
 
   if (!user) {
-    // This case should ideally be handled by the useEffect redirect, but as a fallback:
     return (
       <main className="min-h-screen flex items-center justify-center">
         <p>Redirecting to login...</p>
       </main>
     );
   }
-  
+
   const commonHeader = (
     <div className="text-center space-y-4 w-full max-w-2xl mb-8">
       <div className="flex justify-between items-center w-full">
         <Image
-          src="/Stickers.png"
+          src="https://placehold.co/80x80.png"
           alt="Big Brainbox Logo"
           width={80}
           height={80}
@@ -427,7 +479,7 @@ export default function Home() {
       {organizationStatus === 'member' && organizationDetails && (
         <>
           <p className="text-lg sm:text-xl text-muted-foreground">
-            Organization: {organizationDetails.name} {userRole === 'owner' ? '(Owner)' : '(Member)'}
+            Organization: {organizationDetails.name} ({currentUserName || 'User'} - {userRole === 'owner' ? 'Owner' : userRole === 'member' ? 'Member' : 'Role not set'})
           </p>
           {currentDateTime && (
             <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg">
@@ -448,18 +500,19 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="text-xl sm:text-2xl font-semibold">Organization Setup</CardTitle>
             <CardDescription>
-              {showCreateOrgForm || showJoinOrgForm 
-                ? "Complete the form below." 
+              {currentUserName && <p className="mb-2">Welcome, {currentUserName}!</p>}
+              {showCreateOrgForm || showJoinOrgForm
+                ? "Complete the form below."
                 : "You need to create or join an organization to use the time clock."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!showCreateOrgForm && !showJoinOrgForm && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Button onClick={() => { setShowCreateOrgForm(true); setShowJoinOrgForm(false); }} variant="default" size="lg">
+                <Button onClick={() => { setShowCreateOrgForm(true); setShowJoinOrgForm(false); setShowInviteCodeCreatedCard(false);}} variant="default" size="lg">
                   <Building className="mr-2 h-5 w-5" /> Create Organization
                 </Button>
-                <Button onClick={() => { setShowJoinOrgForm(true); setShowCreateOrgForm(false); }} variant="outline" size="lg">
+                <Button onClick={() => { setShowJoinOrgForm(true); setShowCreateOrgForm(false); setShowInviteCodeCreatedCard(false);}} variant="outline" size="lg">
                   <Users className="mr-2 h-5 w-5" /> Join Organization
                 </Button>
               </div>
@@ -470,12 +523,12 @@ export default function Home() {
                 onOrganizationCreated={(org, inviteCode) => {
                   setOrganizationDetails(org);
                   setUserRole('owner');
-                  setGeneratedInviteCode(inviteCode);
-                  setShowInviteCodeSection(true);
+                  setCurrentUserName(user.displayName || user.email?.split('@')[0] || 'User');
                   setOrganizationStatus('member');
                   setShowCreateOrgForm(false);
+                  setShowInviteCodeCreatedCard(true);
                 }}
-                onBack={() => setShowCreateOrgForm(false)}
+                onBack={() => {setShowCreateOrgForm(false); setShowJoinOrgForm(false);}}
               />
             )}
             {showJoinOrgForm && user && (
@@ -483,11 +536,13 @@ export default function Home() {
                 userId={user.uid}
                 onOrganizationJoined={(org) => {
                   setOrganizationDetails(org);
-                  setUserRole('member');
+                  setUserRole('member'); // User who joins is a member
+                  setCurrentUserName(user.displayName || user.email?.split('@')[0] || 'User');
                   setOrganizationStatus('member');
                   setShowJoinOrgForm(false);
+                  setShowInviteCodeCreatedCard(false);
                 }}
-                onBack={() => setShowJoinOrgForm(false)}
+                onBack={() => {setShowCreateOrgForm(false); setShowJoinOrgForm(false);}}
               />
             )}
           </CardContent>
@@ -496,17 +551,17 @@ export default function Home() {
     );
   }
 
-
   // organizationStatus === 'member'
   return (
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       {commonHeader}
 
-      {showInviteCodeSection && generatedInviteCode && userRole === 'owner' && organizationDetails && (
+      {userRole === 'owner' && organizationDetails?.inviteCode && (
         <Card className="w-full max-w-md shadow-xl rounded-xl bg-green-50 border-green-200 dark:bg-green-900/30 dark:border-green-700">
           <CardHeader>
             <CardTitle className="text-lg sm:text-xl font-semibold text-green-700 dark:text-green-300 flex items-center gap-2">
-              <Info className="h-5 w-5" /> Organization Created!
+              <Info className="h-5 w-5" />
+              {showInviteCodeCreatedCard ? "Organization Created!" : "Your Organization's Invite Code"}
             </CardTitle>
             <CardDescription className="text-green-600 dark:text-green-400">
               Share this invite code with your team members to join "{organizationDetails.name}".
@@ -515,23 +570,25 @@ export default function Home() {
           <CardContent className="text-center">
             <div className="p-3 bg-green-100 dark:bg-green-800/50 rounded-md inline-flex items-center gap-2">
               <Label htmlFor="inviteCodeDisplay" className="sr-only">Invite Code</Label>
-              <Input 
+              <Input
                 id="inviteCodeDisplay"
-                type="text" 
-                value={generatedInviteCode} 
-                readOnly 
-                className="text-2xl font-mono tracking-wider text-green-800 dark:text-green-200 bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 h-auto p-0" 
+                type="text"
+                value={organizationDetails.inviteCode}
+                readOnly
+                className="text-2xl font-mono tracking-wider text-green-800 dark:text-green-200 bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 h-auto p-0"
               />
               <Button variant="ghost" size="sm" onClick={handleCopyInviteCode} aria-label="Copy invite code">
                 <Copy className="h-5 w-5 text-green-600 dark:text-green-400" />
               </Button>
             </div>
           </CardContent>
-          <CardFooter>
-             <Button variant="outline" size="sm" className="w-full" onClick={() => setShowInviteCodeSection(false)}>
-                Dismiss
-             </Button>
-          </CardFooter>
+          {showInviteCodeCreatedCard && (
+            <CardFooter>
+               <Button variant="outline" size="sm" className="w-full" onClick={() => setShowInviteCodeCreatedCard(false)}>
+                  Dismiss
+               </Button>
+            </CardFooter>
+          )}
         </Card>
       )}
 
@@ -545,14 +602,14 @@ export default function Home() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Your Name (for this entry)</Label>
+            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Your Name (for time entry)</Label>
             <Input
               id="name"
               type="text"
-              placeholder="Enter your full name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary"
+              placeholder="Your name for clock-in"
+              value={currentUserName || ''}
+              readOnly
+              className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary bg-muted/50 cursor-not-allowed"
             />
             <p className="text-xs text-muted-foreground mt-1">Logged in as: {user?.email}</p>
           </div>
@@ -560,7 +617,7 @@ export default function Home() {
           <div className="grid grid-cols-2 gap-4">
             <Button
               onClick={handleClockIn}
-              disabled={!name.trim() || isCurrentUserClockedIn}
+              disabled={!currentUserName.trim() || isCurrentUserClockedIn}
               size="lg"
               className="text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out bg-primary hover:bg-primary/90 text-primary-foreground"
               aria-label="Clock In"
@@ -569,7 +626,7 @@ export default function Home() {
             </Button>
             <Button
               onClick={handleClockOut}
-              disabled={!name.trim() || !isCurrentUserClockedIn}
+              disabled={!currentUserName.trim() || !isCurrentUserClockedIn}
               size="lg"
               className="bg-accent hover:bg-accent/90 text-accent-foreground text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out"
               aria-label="Clock Out"
@@ -581,8 +638,11 @@ export default function Home() {
       </Card>
 
       <Card className="w-full max-w-2xl shadow-xl rounded-xl">
-        <CardContent className="pt-6">
-          <TimeLogTable logs={todayLogs} />
+        <CardHeader>
+             <CardTitle className="text-xl sm:text-2xl font-semibold">Today's Time Entries</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <TimeLogTable logs={todayLogs} currentUserName={currentUserName} userRole={userRole} />
         </CardContent>
       </Card>
 
@@ -591,43 +651,62 @@ export default function Home() {
           <CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Data Management</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="export-select">Select Employee to Export</Label>
-            <Select value={selectedExportOption} onValueChange={setSelectedExportOption}>
-              <SelectTrigger id="export-select" className="w-full">
-                <SelectValue placeholder="Select an option" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_EMPLOYEES_OPTION}>All Employees</SelectItem>
-                {uniqueEmployeeNamesForExport.map(empName => (
-                  <SelectItem key={empName} value={empName}>
-                    {empName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {userRole === 'owner' && (
+            <div className="space-y-2">
+              <Label htmlFor="export-select">Select Employee to Export</Label>
+              <Select
+                value={selectedExportOption}
+                onValueChange={setSelectedExportOption}
+                disabled={uniqueEmployeeNamesForExport.length === 0}
+              >
+                <SelectTrigger id="export-select" className="w-full">
+                  <SelectValue placeholder="Select an option" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_EMPLOYEES_OPTION}>All Employees</SelectItem>
+                  {uniqueEmployeeNamesForExport.map(empName => (
+                    <SelectItem key={empName} value={empName}>
+                      {empName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+               {uniqueEmployeeNamesForExport.length === 0 && (
+                <p className="text-xs text-muted-foreground">No entries today to select an employee from.</p>
+              )}
+            </div>
+          )}
+          {userRole === 'member' && (
+             <p className="text-sm text-muted-foreground">You can export your own time entries.</p>
+          )}
 
           <Button
             onClick={handleExport}
             variant="outline"
             className="w-full"
+            disabled={(userRole === 'member' && todayLogs.filter(log => log.name === currentUserName).length === 0) || (userRole === 'owner' && timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd')).length === 0 )}
           >
-            <Download className="mr-2 h-5 w-5" /> Export to XLSX
+            <Download className="mr-2 h-5 w-5" /> Export to XLSX {userRole === 'member' ? `(My Entries)` : ''}
           </Button>
 
           <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" className="w-full">
-                <Trash2 className="mr-2 h-5 w-5" /> Clear All Entries (Local)
+              <Button
+                variant="destructive"
+                className="w-full"
+                disabled={(userRole === 'member' && todayLogs.filter(log => log.name === currentUserName).length === 0) || (userRole === 'owner' && timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd')).length === 0 )}
+              >
+                <Trash2 className="mr-2 h-5 w-5" />
+                Clear {userRole === 'member' ? 'My Entries (Local)' : 'All Entries (Local)'}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete all
-                  time log entries from your browser&apos;s local storage.
+                  This action cannot be undone. This will permanently delete
+                  {userRole === 'member' ? ' your ' : ' all '}
+                  time log entries from your browser&apos;s local storage for today.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -651,6 +730,25 @@ export default function Home() {
         </CardContent>
       </Card>
 
+      {organizationStatus === 'member' && (
+        <Card className="w-full max-w-2xl shadow-xl rounded-xl">
+          <CardHeader>
+            <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+              <Settings className="h-6 w-6 text-primary" />
+              Organization Settings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={handleReturnToOrgSetup} variant="outline" className="w-full">
+              <Users className="mr-2 h-5 w-5" /> Re-configure Organization
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              This will take you back to the organization setup options.
+              Your current organization membership in the database will not be changed by this action.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </main>
   );
 }

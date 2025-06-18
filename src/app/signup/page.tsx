@@ -10,11 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase/config';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { UserPlus } from 'lucide-react';
 import { createUserDocument } from '@/lib/firebase/firestoreService';
 
 export default function SignupPage() {
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -24,16 +25,32 @@ export default function SignupPage() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!fullName.trim()) {
+      toast({ title: 'Error', description: 'Please enter your full name.', variant: 'destructive' });
+      return;
+    }
     if (password !== confirmPassword) {
       toast({ title: 'Error', description: 'Passwords do not match.', variant: 'destructive' });
+      return;
+    }
+    if (!auth) {
+      toast({ title: 'Error', description: 'Authentication service is not available. Please try again later.', variant: 'destructive' });
+      setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await createUserDocument(userCredential.user); 
+      const user = userCredential.user;
+
+      // Update Firebase Auth profile first
+      await updateProfile(user, { displayName: fullName.trim() });
+
+      // Then create/update Firestore document, passing the displayName explicitly
+      await createUserDocument(user, fullName.trim());
+
       toast({ title: 'Signup Successful', description: 'Your account has been created.' });
-      router.push('/'); 
+      router.push('/');
     } catch (error: any) {
       toast({
         title: 'Signup Failed',
@@ -57,6 +74,18 @@ export default function SignupPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name</Label>
+              <Input
+                id="fullName"
+                type="text"
+                placeholder="Your Full Name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+                className="text-base py-3 px-4 h-12 rounded-md"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
