@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Share2, UploadCloud } from 'lucide-react';
+import { TimeLogTable } from '@/components/TimeLogTable';
 
 export default function Home() {
   const [name, setName] = useState<string>('');
@@ -96,14 +97,28 @@ export default function Home() {
         newLogs[logIndex] = { ...newLogs[logIndex], clockOut: new Date() };
         return newLogs;
       }
-      // This toast should ideally not be reached if isCurrentUserClockedIn is accurate.
       toast({ title: 'Error', description: 'Could not find active clock-in record for today.', variant: 'destructive' });
       return prevLogs;
     });
   };
 
+  const todayLogs = useMemo(() => {
+    const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+    return timeLogs
+      .filter(log => log.date === todayDateStr)
+      .sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
+  }, [timeLogs]);
+
+  const handleExport = () => {
+    toast({
+        title: "Export Timesheet",
+        description: "XLSX export functionality is coming soon!",
+    });
+    console.log("Exporting timesheet:", todayLogs);
+  };
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center justify-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
+    <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       <div className="text-center space-y-4 w-full max-w-2xl">
         <Image
           src="/Stickers.png"
@@ -121,7 +136,7 @@ export default function Home() {
           Professional time tracking with cloud sync
         </p>
         {currentDateTime && (
-          <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--accent))] text-primary-foreground font-semibold text-md sm:text-lg">
+          <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg">
             <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6" />
             <span>{currentDateTime}</span>
           </div>
@@ -153,7 +168,7 @@ export default function Home() {
               onClick={handleClockIn}
               disabled={!name.trim() || isCurrentUserClockedIn}
               size="lg"
-              className="bg-green-500 hover:bg-green-600 text-white text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out"
+              className="text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out"
               aria-label="Clock In"
             >
               <ArrowRightToLine className="mr-2 h-5 w-5" /> Clock In
@@ -162,7 +177,7 @@ export default function Home() {
               onClick={handleClockOut}
               disabled={!name.trim() || !isCurrentUserClockedIn}
               size="lg"
-              className="bg-pink-500 hover:bg-pink-600 text-white text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out"
+              className="bg-accent hover:bg-accent/90 text-accent-foreground text-base py-3 h-12 rounded-md transition-colors duration-150 ease-in-out"
               aria-label="Clock Out"
             >
               <ArrowLeftToLine className="mr-2 h-5 w-5" /> Clock Out
@@ -170,6 +185,38 @@ export default function Home() {
           </div>
         </CardContent>
       </Card>
+
+      <Card className="w-full max-w-2xl shadow-xl rounded-xl">
+        <CardContent className="pt-6">
+          <TimeLogTable logs={todayLogs} />
+        </CardContent>
+      </Card>
+
+      <Card className="w-full max-w-2xl shadow-xl rounded-xl">
+        <CardHeader>
+          <CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Integrations</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button
+            onClick={handleExport}
+            variant="outline"
+            className="w-full"
+          >
+            <Download className="mr-2 h-5 w-5" /> Export to XLSX
+          </Button>
+          <div className="text-sm text-muted-foreground text-center p-4 border border-dashed rounded-md bg-secondary/30">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline><path d="M15.5 22.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"></path><path d="M15.5 17.5v-1.5a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1.5"></path></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sky-500"><path d="M10.5 10.5C12.9853 10.5 15 8.48528 15 6C15 3.51472 12.9853 1.5 10.5 1.5C8.01472 1.5 6 3.51472 6 6C6 8.48528 8.01472 10.5 10.5 10.5Z"></path><path d="M10.5 10.5V22.5"></path><path d="M6 19.5C4.01472 19.5 1.5 17.6834 1.5 15.3636C1.5 13.0437 4.01472 11.2272 6 11.2272"></path><path d="M15 19.5C16.9853 19.5 19.5 17.6834 19.5 15.3636C19.5 13.0437 16.9853 11.2272 15 11.2272"></path><path d="M19.5 10.5C21.9853 10.5 22.5 8.48528 22.5 6C22.5 3.51472 21.9853 1.5 19.5 1.5"></path></svg>
+              </div>
+              SharePoint and OneDrive real-time sync coming soon!
+              <br />
+              This feature requires additional server-side setup and configuration.
+          </div>
+        </CardContent>
+      </Card>
+
     </main>
   );
 }
+
