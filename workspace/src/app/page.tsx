@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy, Settings } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
 import {
@@ -163,7 +163,7 @@ export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
 
-  const [currentUserName, setCurrentUserName] = useState<string>(''); // For clock-in, from user profile
+  const [currentUserName, setCurrentUserName] = useState<string>(''); 
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
@@ -177,7 +177,7 @@ export default function Home() {
   const [showCreateOrgForm, setShowCreateOrgForm] = useState(false);
   const [showJoinOrgForm, setShowJoinOrgForm] = useState(false);
   
-  const [showInviteCodeCreatedCard, setShowInviteCodeCreatedCard] = useState(false); // To show "Org Created!" message
+  const [showInviteCodeCreatedCard, setShowInviteCodeCreatedCard] = useState(false); 
 
   useEffect(() => {
     if (authLoading) {
@@ -198,9 +198,13 @@ export default function Home() {
           setCurrentUserName(orgAndUserData.userDisplayName || user.email?.split('@')[0] || 'User');
           setOrganizationStatus('member');
         } else {
-           // User might exist but not be in an org, or orgData is null due to an issue
+          // User might exist but not be in an org, or orgData is null due to an issue
+          // Try to fetch profile name even if no org
           getUserProfile(user.uid).then(profile => {
             setCurrentUserName(profile?.displayName || user.email?.split('@')[0] || 'User');
+          }).catch(() => {
+            // Fallback if getUserProfile fails
+             setCurrentUserName(user.email?.split('@')[0] || 'User');
           });
           setOrganizationStatus('needsSetup');
           setShowCreateOrgForm(false); 
@@ -232,7 +236,6 @@ export default function Home() {
           localStorage.removeItem('timeLogs');
         }
       }
-      // currentUserName is set in the above useEffect
     }
   }, [user, organizationStatus]);
 
@@ -319,9 +322,10 @@ export default function Home() {
     if (userRole === 'member' && currentUserName) {
         return [currentUserName];
     }
-    const names = new Set(todayLogs.map(log => log.name)); // todayLogs is already filtered for members
+    // For owners, get names from all todayLogs (which are already all org logs)
+    const names = new Set(timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd')).map(log => log.name));
     return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [todayLogs, userRole, currentUserName]);
+  }, [timeLogs, userRole, currentUserName]);
 
 
   const formatDurationForExport = (startTime: Date, endTime: Date | null): string => {
@@ -338,19 +342,25 @@ export default function Home() {
   };
 
   const handleExport = () => {
-    let logsToProcess = todayLogs; // Already filtered for members if applicable
-    let fileNamePart = "All_Employees";
+    let logsToProcess: TimeLogEntry[];
+    let fileNamePart: string;
+    const allTodayLogs = timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd'));
 
     if (userRole === 'member' && currentUserName) {
-        logsToProcess = todayLogs.filter(log => log.name === currentUserName); // Double ensure
+        logsToProcess = allTodayLogs.filter(log => log.name === currentUserName);
         fileNamePart = currentUserName.replace(/\s+/g, '_');
-    } else if (userRole === 'owner' && selectedExportOption !== ALL_EMPLOYEES_OPTION) {
-        logsToProcess = todayLogs.filter(log => log.name === selectedExportOption);
-        fileNamePart = selectedExportOption.replace(/\s+/g, '_');
-    } else if (userRole === 'owner') { // Owner exporting all
-        logsToProcess = [...todayLogs].sort((a, b) => a.name.localeCompare(b.name));
+    } else if (userRole === 'owner') {
+        if (selectedExportOption === ALL_EMPLOYEES_OPTION) {
+            logsToProcess = [...allTodayLogs].sort((a, b) => a.name.localeCompare(b.name));
+            fileNamePart = "All_Employees";
+        } else {
+            logsToProcess = allTodayLogs.filter(log => log.name === selectedExportOption);
+            fileNamePart = selectedExportOption.replace(/\s+/g, '_');
+        }
+    } else {
+        toast({ title: "Error", description: "Cannot determine export scope.", variant: "destructive" });
+        return;
     }
-
 
     if (logsToProcess.length === 0) {
       const forWhom = userRole === 'member' ? currentUserName : 
@@ -387,13 +397,11 @@ export default function Home() {
   };
 
   const confirmClearEntries = () => {
-    // For members, only clear their own entries. Owners clear all.
     if (userRole === 'member' && currentUserName) {
         setTimeLogs(prevLogs => prevLogs.filter(log => log.name !== currentUserName));
     } else if (userRole === 'owner') {
         setTimeLogs([]);
     }
-    // Note: localStorage will be updated by the useEffect on timeLogs
     setIsClearConfirmOpen(false);
     toast({
       title: "Entries Cleared",
@@ -407,6 +415,16 @@ export default function Home() {
         .then(() => toast({ title: "Copied!", description: "Invite code copied to clipboard." }))
         .catch(() => toast({ title: "Error", description: "Could not copy invite code.", variant: "destructive" }));
     }
+  };
+
+  const handleReturnToOrgSetup = () => {
+    setOrganizationStatus('needsSetup');
+    setOrganizationDetails(null);
+    // userRole is part of organizationDetails now, effectively cleared
+    setShowCreateOrgForm(false);
+    setShowJoinOrgForm(false);
+    setShowInviteCodeCreatedCard(false);
+    // currentUserName remains, as it's tied to the user's profile, not the org state
   };
 
   if (organizationStatus === 'loading' || authLoading) {
@@ -492,7 +510,6 @@ export default function Home() {
                 onOrganizationCreated={(org, inviteCode) => {
                   setOrganizationDetails(org);
                   setUserRole('owner');
-                  // currentUserName should be set from user.displayName via getUserProfile
                   setOrganizationStatus('member');
                   setShowCreateOrgForm(false);
                   setShowInviteCodeCreatedCard(true); 
@@ -506,7 +523,6 @@ export default function Home() {
                 onOrganizationJoined={(org) => {
                   setOrganizationDetails(org);
                   setUserRole('member'); 
-                  // currentUserName should be set from user.displayName via getUserProfile
                   setOrganizationStatus('member');
                   setShowJoinOrgForm(false);
                   setShowInviteCodeCreatedCard(false);
@@ -577,7 +593,7 @@ export default function Home() {
               type="text"
               placeholder="Your name for clock-in"
               value={currentUserName}
-              readOnly // Name is now read-only, taken from profile
+              readOnly 
               className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary bg-muted/50 cursor-not-allowed"
             />
             <p className="text-xs text-muted-foreground mt-1">Logged in as: {user?.email}</p>
@@ -610,7 +626,7 @@ export default function Home() {
         <CardHeader>
              <CardTitle className="text-xl sm:text-2xl font-semibold">Today's Time Entries</CardTitle>
         </CardHeader>
-        <CardContent className="pt-0"> {/* Adjusted pt-0 as header now exists */}
+        <CardContent className="pt-0"> 
           <TimeLogTable logs={todayLogs} currentUserName={currentUserName} userRole={userRole} />
         </CardContent>
       </Card>
@@ -686,6 +702,29 @@ export default function Home() {
         </CardContent>
       </Card>
 
+      {organizationStatus === 'member' && (
+        <Card className="w-full max-w-2xl shadow-xl rounded-xl">
+          <CardHeader>
+            <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+              <Settings className="h-6 w-6 text-primary" />
+              Organization Settings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={handleReturnToOrgSetup} variant="outline" className="w-full">
+              <Users className="mr-2 h-5 w-5" /> Re-configure Organization
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              This will take you back to the organization setup options.
+              Your current organization membership in the database will not be changed by this action.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
     </main>
   );
 }
+
+
+    
