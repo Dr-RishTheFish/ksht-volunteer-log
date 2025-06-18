@@ -41,10 +41,11 @@ export default function Home() {
   }, [timeLogs]);
 
   useEffect(() => {
-    setCurrentDateTime(format(new Date(), 'MM/dd/yyyy - hh:mm:ss a'));
-    const timer = setInterval(() => {
+    const updateDateTime = () => {
       setCurrentDateTime(format(new Date(), 'MM/dd/yyyy - hh:mm:ss a'));
-    }, 1000);
+    };
+    updateDateTime();
+    const timer = setInterval(updateDateTime, 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -95,6 +96,8 @@ export default function Home() {
         newLogs[logIndex] = { ...newLogs[logIndex], clockOut: new Date() };
         return newLogs;
       }
+      // This case should ideally not be reached if isCurrentUserClockedIn is accurate
+      // but as a safeguard:
       toast({ title: 'Error', description: 'Could not find active clock-in record for today.', variant: 'destructive' });
       return prevLogs;
     });
@@ -112,7 +115,9 @@ export default function Home() {
           className="mx-auto rounded-full shadow-lg"
         />
         <h1 className="text-4xl sm:text-5xl font-bold">
-          <span className="text-primary">Big Brainbox Time</span> <span className="text-accent">Clock</span>
+          <span className="bg-gradient-to-r from-primary to-accent text-transparent bg-clip-text">
+            Big Brainbox Time Clock
+          </span>
         </h1>
         <p className="text-lg sm:text-xl text-muted-foreground">
           Professional time tracking with cloud sync
