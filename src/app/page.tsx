@@ -37,7 +37,7 @@ import { useRouter } from 'next/navigation';
 const ALL_EMPLOYEES_OPTION = "__ALL_EMPLOYEES__";
 
 // Placeholder Organization Setup Components
-function CreateOrganizationForm({ onOrganizationCreated }: { onOrganizationCreated: () => void }) {
+function CreateOrganizationForm({ onOrganizationCreated, onBack }: { onOrganizationCreated: () => void; onBack: () => void; }) {
   const [orgName, setOrgName] = useState('');
   const { toast } = useToast();
 
@@ -66,11 +66,14 @@ function CreateOrganizationForm({ onOrganizationCreated }: { onOrganizationCreat
         />
       </div>
       <Button type="submit" className="w-full">Create Organization</Button>
+      <Button type="button" variant="link" onClick={onBack} className="w-full mt-2">
+        Back to options
+      </Button>
     </form>
   );
 }
 
-function JoinOrganizationForm({ onOrganizationJoined }: { onOrganizationJoined: () => void }) {
+function JoinOrganizationForm({ onOrganizationJoined, onBack }: { onOrganizationJoined: () => void; onBack: () => void; }) {
   const [inviteCode, setInviteCode] = useState('');
   const { toast } = useToast();
 
@@ -99,6 +102,9 @@ function JoinOrganizationForm({ onOrganizationJoined }: { onOrganizationJoined: 
         />
       </div>
       <Button type="submit" className="w-full">Join Organization</Button>
+      <Button type="button" variant="link" onClick={onBack} className="w-full mt-2">
+        Back to options
+      </Button>
     </form>
   );
 }
@@ -324,7 +330,6 @@ export default function Home() {
           width={80}
           height={80}
           className="rounded-full shadow-lg"
-          data-ai-hint="logo company"
         />
         <Button onClick={logout} variant="outline" size="sm">
           <LogOut className="mr-2 h-4 w-4" /> Logout
@@ -376,16 +381,16 @@ export default function Home() {
               </div>
             )}
             {showCreateOrgForm && (
-              <>
-                <CreateOrganizationForm onOrganizationCreated={() => setOrganizationStatus('member')} />
-                <Button variant="link" onClick={() => { setShowCreateOrgForm(false);}} className="w-full">Back to options</Button>
-              </>
+              <CreateOrganizationForm
+                onOrganizationCreated={() => setOrganizationStatus('member')}
+                onBack={() => setShowCreateOrgForm(false)}
+              />
             )}
             {showJoinOrgForm && (
-              <>
-                <JoinOrganizationForm onOrganizationJoined={() => setOrganizationStatus('member')} />
-                <Button variant="link" onClick={() => { setShowJoinOrgForm(false);}} className="w-full">Back to options</Button>
-              </>
+              <JoinOrganizationForm
+                onOrganizationJoined={() => setOrganizationStatus('member')}
+                onBack={() => setShowJoinOrgForm(false)}
+              />
             )}
           </CardContent>
         </Card>
@@ -516,3 +521,4 @@ export default function Home() {
     </main>
   );
 }
+
