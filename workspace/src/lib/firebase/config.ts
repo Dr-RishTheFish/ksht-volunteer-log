@@ -61,7 +61,7 @@ if (!crucialEnvVarsMissing) {
       console.log("Firebase app initialized successfully (New Instance). Project ID:", projectId);
     } catch (error) {
       console.error("Firebase initialization error:", error);
-      console.error("This usually means your Firebase config values in .env.local might be present but incorrect, or the project itself has issues.");
+      console.error("This usually means your Firebase config values in .env.local might be present but incorrect (e.g., invalid API key format, non-existent project ID), or the project itself has issues (e.g., not properly set up in Firebase console).");
       crucialEnvVarsMissing = true; 
     }
   } else {
@@ -86,18 +86,17 @@ if (!crucialEnvVarsMissing) {
     }
   } else if (!crucialEnvVarsMissing) { 
     // This case should ideally not be reached if crucialEnvVarsMissing was false
-    console.error("Firebase app instance is undefined after initialization/retrieval attempt, despite no crucial vars reported missing initially. This is unexpected.");
+    console.error("Firebase app instance is undefined after initialization/retrieval attempt, despite no crucial vars reported missing initially. This is unexpected and likely points to an issue with the firebaseConfig object passed to initializeApp, even if individual variables seemed present.");
     crucialEnvVarsMissing = true;
   }
 }
 
 if (crucialEnvVarsMissing) {
-  const errorMessage = "CRITICAL Firebase Setup Issue: Firebase is not configured correctly, either due to missing/incorrect environment variables (check .env.local and ensure it's loaded by restarting server) or issues initializing Firebase services (see console for specifics). Authentication and Firestore features WILL NOT WORK.";
+  const errorMessage = "CRITICAL Firebase Setup Issue: Firebase is not configured correctly, either due to missing/incorrect environment variables (check .env.local and ensure it's loaded by restarting server) or issues initializing Firebase services (see console for specifics). Authentication and Firestore features WILL NOT WORK. Exported 'auth' and 'db' instances will be undefined.";
   console.error(errorMessage);
-  // In a real app, you might want to display a more user-friendly message or lock down features
-  // if (typeof window !== 'undefined' && (!authInstance || !dbInstance)) {
-  //   alert("Firebase is not properly configured. Some features may not work.");
-  // }
+  // Ensure authInstance and dbInstance are indeed undefined if setup failed
+  authInstance = undefined;
+  dbInstance = undefined;
 } else {
    console.log("Firebase config check complete. Auth and Firestore services should be available if enabled in your Firebase project console and security rules allow access.");
 }
