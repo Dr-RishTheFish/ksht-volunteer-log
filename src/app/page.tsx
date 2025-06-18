@@ -9,8 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy, Settings, PlusCircle } from 'lucide-react';
+import { format, parse } from 'date-fns';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy, Settings, PlusCircle, MoreVertical, Edit3, Calendar as CalendarIcon } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
 import {
@@ -25,12 +25,21 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { 
@@ -38,7 +47,9 @@ import {
   joinOrganizationWithInviteCode, 
   getUserOrganizationDetails,
   getUserAssociatedOrganizations,
-  updateUserActiveOrganization
+  updateUserActiveOrganization,
+  deleteOrganization as deleteOrgService,
+  getOrganizationMembers
 } from '@/lib/firebase/firestoreService';
 import type { Organization } from '@/interfaces/Organization';
 import type { UserProfile } from '@/interfaces/User';
@@ -188,6 +199,17 @@ export default function Home() {
   const [userRole, setUserRole] = useState<UserProfile['role']>(null);
   const [showInviteCodeCreatedCard, setShowInviteCodeCreatedCard] = useState(false);
 
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [orgToDelete, setOrgToDelete] = useState<Organization | null>(null);
+
+  const [organizationMembers, setOrganizationMembers] = useState<UserProfile[]>([]);
+  const [manualSelectedEmployeeId, setManualSelectedEmployeeId] = useState<string>('');
+  const [manualDate, setManualDate] = useState<Date | undefined>(new Date());
+  const [manualClockInTime, setManualClockInTime] = useState<string>(''); // HH:mm
+  const [manualClockOutTime, setManualClockOutTime] = useState<string>(''); // HH:mm
+  const [isAddingManualEntry, setIsAddingManualEntry] = useState(false);
+
+
   const fetchAndSetUserAssociatedOrgs = async (userId: string) => {
     setIsLoadingUserAssociatedOrgs(true);
     try {
@@ -285,6 +307,27 @@ export default function Home() {
     const timer = setInterval(updateDateTime, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Fetch organization members if user is owner and in memberView
+  useEffect(() => {
+    if (componentState === 'memberView' && userRole === 'owner' && organizationDetails?.id) {
+      getOrganizationMembers(organizationDetails.id)
+        .then(members => {
+          setOrganizationMembers(members);
+          if (members.length > 0 && !manualSelectedEmployeeId) {
+            setManualSelectedEmployeeId(members[0].uid); // Default to first member
+          }
+        })
+        .catch(error => {
+          console.error("Error fetching organization members:", error);
+          toast({ title: "Error", description: "Could not fetch organization members.", variant: "destructive"});
+          setOrganizationMembers([]);
+        });
+    } else {
+      setOrganizationMembers([]); // Clear if not owner or not in member view
+    }
+  }, [componentState, userRole, organizationDetails?.id, toast]);
+
 
   const isCurrentUserClockedIn = useMemo(() => {
     if (!currentUserName || componentState !== 'memberView') return false;
@@ -418,7 +461,7 @@ export default function Home() {
     } else if (userRole === 'owner') {
       const logsForTodayInOrg = timeLogs.filter(log => log.date === todayDateStr);
       clearedCount = logsForTodayInOrg.length;
-      setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== todayDateStr));
+      setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== todayDateStr)); // Clears all for today in current org
       if (clearedCount > 0) {
         toast({ title: "All Entries Cleared", description: `All ${clearedCount} time entr${clearedCount === 1 ? 'y' : 'ies'} for today in ${organizationDetails.name} have been cleared from local storage.` });
       } else {
@@ -459,6 +502,93 @@ export default function Home() {
     setShowInviteCodeCreatedCard(false);
     setTimeLogs([]);
   };
+
+  const handleDeleteOrgClicked = (org: Organization) => {
+    setOrgToDelete(org);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteOrganization = async () => {
+    if (!orgToDelete || !user) return;
+    try {
+      await deleteOrgService(orgToDelete.id);
+      toast({ title: 'Organization Deleted', description: `"${orgToDelete.name}" has been deleted.` });
+      setOrgToDelete(null);
+      setIsDeleteDialogOpen(false);
+      fetchAndSetUserAssociatedOrgs(user.uid); // Refresh list
+      if (organizationDetails?.id === orgToDelete.id) {
+        setOrganizationDetails(null);
+        setUserRole(null);
+        setComponentState('orgSelection'); // Go back to selection if current org was deleted
+        setOrgSelectionSubView('list');
+      }
+    } catch (error: any) {
+      toast({ title: 'Error Deleting Organization', description: error.message || 'Could not delete organization.', variant: 'destructive' });
+    }
+  };
+
+  const handleAddManualTimeEntry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAddingManualEntry(true);
+
+    if (!manualSelectedEmployeeId || !manualDate || !manualClockInTime) {
+      toast({ title: "Missing Information", description: "Please select an employee, date, and clock-in time.", variant: "destructive" });
+      setIsAddingManualEntry(false);
+      return;
+    }
+
+    const selectedEmployee = organizationMembers.find(mem => mem.uid === manualSelectedEmployeeId);
+    if (!selectedEmployee) {
+      toast({ title: "Error", description: "Selected employee not found.", variant: "destructive" });
+      setIsAddingManualEntry(false);
+      return;
+    }
+
+    try {
+      const dateStr = format(manualDate, 'yyyy-MM-dd');
+      
+      const [inHours, inMinutes] = manualClockInTime.split(':').map(Number);
+      const clockInDateTime = new Date(manualDate);
+      clockInDateTime.setHours(inHours, inMinutes, 0, 0);
+
+      let clockOutDateTime: Date | null = null;
+      if (manualClockOutTime) {
+        const [outHours, outMinutes] = manualClockOutTime.split(':').map(Number);
+        clockOutDateTime = new Date(manualDate);
+        clockOutDateTime.setHours(outHours, outMinutes, 0, 0);
+
+        if (clockOutDateTime <= clockInDateTime) {
+          toast({ title: "Invalid Time", description: "Clock-out time must be after clock-in time.", variant: "destructive" });
+          setIsAddingManualEntry(false);
+          return;
+        }
+      }
+      
+      const newLog: TimeLogEntry = {
+        id: crypto.randomUUID(),
+        name: selectedEmployee.displayName,
+        clockIn: clockInDateTime,
+        clockOut: clockOutDateTime,
+        date: dateStr,
+      };
+
+      setTimeLogs(prevLogs => [...prevLogs, newLog].sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime()));
+      toast({ title: "Manual Entry Added", description: `Time log added for ${selectedEmployee.displayName}.` });
+
+      // Reset form
+      setManualClockInTime('');
+      setManualClockOutTime('');
+      // setManualDate(new Date()); // Optionally reset date or keep it
+      // setManualSelectedEmployeeId(organizationMembers.length > 0 ? organizationMembers[0].uid : ''); // Optionally reset employee
+
+    } catch (error) {
+      console.error("Error processing manual time entry:", error);
+      toast({ title: "Error Adding Entry", description: "Could not add manual time entry.", variant: "destructive"});
+    } finally {
+      setIsAddingManualEntry(false);
+    }
+  };
+
 
   if (componentState === 'loading' || authLoading) {
     return (
@@ -507,15 +637,34 @@ export default function Home() {
               ) : userAssociatedOrgs.length > 0 ? (
                 <div className="space-y-3 max-h-96 overflow-y-auto p-1">
                   {userAssociatedOrgs.map(org => (
-                    <Button key={org.id} variant="outline" className="w-full justify-start p-4 h-auto text-left" onClick={() => handleSelectOrganization(org)}>
-                      <Building className="mr-3 h-5 w-5 text-primary/80" />
-                      <div className="flex flex-col">
-                        <span className="font-semibold">{org.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          Role: {org.ownerUid === user.uid ? 'Owner' : 'Member'} | ID: {org.id.substring(0,6)}...
-                        </span>
-                      </div>
-                    </Button>
+                    <div key={org.id} className="flex items-center gap-2">
+                      <Button variant="outline" className="flex-1 justify-start p-4 h-auto text-left" onClick={() => handleSelectOrganization(org)}>
+                        <Building className="mr-3 h-5 w-5 text-primary/80" />
+                        <div className="flex flex-col">
+                          <span className="font-semibold">{org.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            Role: {org.ownerUid === user.uid ? 'Owner' : 'Member'} | ID: {org.id.substring(0,6)}...
+                          </span>
+                        </div>
+                      </Button>
+                      {org.ownerUid === user.uid && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-9 w-9">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteOrgClicked(org)}
+                              className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete Organization
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -538,7 +687,7 @@ export default function Home() {
             <CardContent>
               <CreateOrganizationForm
                 userId={user.uid}
-                onOrganizationCreated={(org) => { // Removed inviteCode from params here, as it's part of 'org'
+                onOrganizationCreated={(org) => { 
                   setOrganizationDetails(org);
                   setUserRole('owner');
                   setComponentState('memberView');
@@ -568,6 +717,22 @@ export default function Home() {
             </CardContent>
           </Card>
         )}
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure you want to delete "{orgToDelete?.name}"?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the organization and all associated data that is directly stored within the organization document. Member time logs stored locally will remain unless their active organization changes.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setIsDeleteDialogOpen(false); setOrgToDelete(null); }}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteOrganization} className="bg-red-600 hover:bg-red-700">
+                Yes, Delete Organization
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     );
   }
@@ -611,6 +776,96 @@ export default function Home() {
           </div>
         </CardContent>
       </Card>
+
+      {userRole === 'owner' && organizationDetails && (
+        <Card className="w-full max-w-2xl shadow-xl rounded-xl">
+          <CardHeader>
+            <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+              <Edit3 className="h-6 w-6 text-primary" /> Manual Time Adjustment
+            </CardTitle>
+            <CardDescription>Manually add or adjust time entries for employees in "{organizationDetails.name}".</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAddManualTimeEntry} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="manualEmployeeSelect">Employee</Label>
+                  <Select 
+                    value={manualSelectedEmployeeId} 
+                    onValueChange={setManualSelectedEmployeeId}
+                    disabled={organizationMembers.length === 0 || isAddingManualEntry}
+                  >
+                    <SelectTrigger id="manualEmployeeSelect">
+                      <SelectValue placeholder="Select employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {organizationMembers.length > 0 ? organizationMembers.map(member => (
+                        <SelectItem key={member.uid} value={member.uid}>
+                          {member.displayName} ({member.email})
+                        </SelectItem>
+                      )) : <SelectItem value="-" disabled>No members found</SelectItem>}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manualDate">Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="manualDate"
+                        variant={"outline"}
+                        className="w-full justify-start text-left font-normal h-10"
+                        disabled={isAddingManualEntry}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {manualDate ? format(manualDate, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={manualDate}
+                        onSelect={setManualDate}
+                        initialFocus
+                        disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="manualClockInTime">Clock In Time</Label>
+                  <Input 
+                    id="manualClockInTime" 
+                    type="time" 
+                    value={manualClockInTime} 
+                    onChange={(e) => setManualClockInTime(e.target.value)} 
+                    required 
+                    disabled={isAddingManualEntry}
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manualClockOutTime">Clock Out Time (Optional)</Label>
+                  <Input 
+                    id="manualClockOutTime" 
+                    type="time" 
+                    value={manualClockOutTime} 
+                    onChange={(e) => setManualClockOutTime(e.target.value)} 
+                    disabled={isAddingManualEntry}
+                    className="h-10"
+                  />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={isAddingManualEntry || !manualSelectedEmployeeId || !manualDate || !manualClockInTime}>
+                {isAddingManualEntry ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {isAddingManualEntry ? 'Adding Entry...' : 'Add Manual Time Entry'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="w-full max-w-2xl shadow-xl rounded-xl">
         <CardHeader><CardTitle className="text-xl sm:text-2xl font-semibold">Today's Time Entries</CardTitle></CardHeader>

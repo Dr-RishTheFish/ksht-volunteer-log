@@ -1,6 +1,6 @@
 
 import { db, auth } from './config';
-import { doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp, Timestamp, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp, Timestamp, updateDoc, arrayUnion, deleteDoc } from 'firebase/firestore';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { UserProfile } from '@/interfaces/User';
 import type { Organization } from '@/interfaces/Organization';
@@ -39,7 +39,7 @@ export const createUserDocument = async (user: FirebaseUser, displayNameFromSign
         uid: user.uid,
         email: user.email,
         displayName: effectiveDisplayName,
-        organizationId: null, // This might represent the "last active" or "primary" org
+        organizationId: null, 
         role: null,
         createdAt: new Date(),
       };
@@ -58,8 +58,7 @@ export const createUserDocument = async (user: FirebaseUser, displayNameFromSign
         updates.email = user.email;
         needsUpdate = true;
       }
-      // We don't automatically update organizationId or role here; that's handled by specific org actions.
-
+      
       if (needsUpdate) {
         console.log(`[firestoreService] User document exists at ${userPath}. Updating profile details.`);
         await updateDoc(userRef, updates);
@@ -93,12 +92,11 @@ export const createOrganizationWithInviteCode = async (
       ownerUid: userId,
       inviteCode: inviteCode,
       createdAt: serverTimestamp(),
-      memberUids: [userId], // Owner is implicitly a member
+      memberUids: [userId], 
     });
     console.log(`[firestoreService] Organization created with ID: ${newOrgDocRef.id}`);
 
     const userRef = doc(db, 'users', userId);
-    // Set this new org as the user's "active" org
     await updateDoc(userRef, {
       organizationId: newOrgDocRef.id,
       role: 'owner',
@@ -147,7 +145,6 @@ export const joinOrganizationWithInviteCode = async (
     const organizationData = orgDocSnapshot.data() as Omit<Organization, 'id' | 'createdAt'> & { createdAt: Timestamp; memberUids?: string[] };
 
     const userRef = doc(db, 'users', userId);
-    // Set this joined org as the user's "active" org
     await updateDoc(userRef, {
       organizationId: organizationId,
       role: 'member',
@@ -173,7 +170,6 @@ export const joinOrganizationWithInviteCode = async (
   }
 };
 
-// Gets details for a user's "active" or "primary" organization (stored on user profile)
 export const getUserOrganizationDetails = async (
   userId: string
 ): Promise<{ organization: Organization | null; userRole: UserProfile['role']; userDisplayName: string } | null> => {
@@ -211,7 +207,6 @@ export const getUserOrganizationDetails = async (
     const orgDoc = await getDoc(orgRef);
     if (!orgDoc.exists()) {
       console.warn(`[firestoreService] Organization ${userProfile.organizationId} not found for user ${userId}.`);
-      // Clear the potentially stale organizationId from user's profile
       await updateDoc(userRef, { organizationId: null, role: null });
       return { organization: null, userRole: null, userDisplayName };
     }
@@ -252,10 +247,10 @@ export const getUserAssociatedOrganizations = async (userId: string): Promise<Or
     const organizationsMap = new Map<string, Organization>();
 
     const processSnapshot = (snapshot: typeof ownedOrgsSnapshot) => {
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        organizationsMap.set(doc.id, {
-          id: doc.id,
+      snapshot.forEach(docSnap => { // Renamed doc to docSnap to avoid conflict with outer doc
+        const data = docSnap.data();
+        organizationsMap.set(docSnap.id, {
+          id: docSnap.id,
           name: data.name,
           ownerUid: data.ownerUid,
           inviteCode: data.inviteCode,
@@ -266,7 +261,7 @@ export const getUserAssociatedOrganizations = async (userId: string): Promise<Or
     };
 
     processSnapshot(ownedOrgsSnapshot);
-    processSnapshot(memberOrgsSnapshot); // Duplicates will be overwritten by map, which is fine.
+    processSnapshot(memberOrgsSnapshot); 
     
     console.log(`[firestoreService] Found ${organizationsMap.size} associated organizations for user ${userId}`);
     return Array.from(organizationsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -316,4 +311,75 @@ export const updateUserActiveOrganization = async (userId: string, organizationI
     console.error(`[firestoreService] Error updating active organization for user ${userId}:`, error);
     throw error;
   }
+};
+
+export const deleteOrganization = async (orgId: string): Promise<void> => {
+  if (!db) {
+    console.error("[firestoreService] Firestore (db) is not initialized for deleteOrganization.");
+    throw new Error("Firestore (db) is not initialized.");
+  }
+  if (!orgId) {
+    console.error("[firestoreService] Organization ID is missing for deleteOrganization.");
+    throw new Error("Organization ID is missing.");
+  }
+
+  const orgRef = doc(db, 'organizations', orgId);
+  console.log(`[firestoreService] Attempting to delete organization with ID: ${orgId}`);
+  try {
+    await deleteDoc(orgRef);
+    console.log(`[firestoreService] Successfully deleted organization: ${orgId}`);
+  } catch (error) {
+    console.error(`[firestoreService] Error deleting organization ${orgId}:`, error);
+    throw error;
+  }
+};
+
+export const getOrganizationMembers = async (orgId: string): Promise<UserProfile[]> => {
+  if (!db) {
+    console.error("[firestoreService] Firestore (db) is not initialized for getOrganizationMembers.");
+    return [];
+  }
+  if (!orgId) {
+    console.error("[firestoreService] Organization ID is missing for getOrganizationMembers.");
+    return [];
+  }
+
+  const orgRef = doc(db, 'organizations', orgId);
+  const orgDoc = await getDoc(orgRef);
+
+  if (!orgDoc.exists()) {
+    console.error(`[firestoreService] Organization ${orgId} not found in getOrganizationMembers.`);
+    return [];
+  }
+
+  const orgData = orgDoc.data() as Organization;
+  const memberUids = orgData.memberUids || [];
+
+  if (memberUids.length === 0) {
+    return [];
+  }
+
+  const memberProfiles: UserProfile[] = [];
+  const usersRef = collection(db, 'users');
+  const MAX_IN_QUERY_ARGS = 30; 
+
+  for (let i = 0; i < memberUids.length; i += MAX_IN_QUERY_ARGS) {
+    const uidsChunk = memberUids.slice(i, i + MAX_IN_QUERY_ARGS);
+    if (uidsChunk.length > 0) {
+      const q = query(usersRef, where('uid', 'in', uidsChunk));
+      const querySnapshot = await getDocs(q);
+      querySnapshot.forEach((userDocSnap) => {
+        if (userDocSnap.exists()) {
+          const profileData = userDocSnap.data() as UserProfile;
+          // Ensure displayName is sensible
+          if (!profileData.displayName) {
+            profileData.displayName = profileData.email?.split('@')[0] || `User ${profileData.uid.substring(0,6)}`;
+          }
+          memberProfiles.push(profileData);
+        }
+      });
+    }
+  }
+  
+  return memberProfiles.sort((a, b) => a.displayName.localeCompare(b.displayName));
 };
