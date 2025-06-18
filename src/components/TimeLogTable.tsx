@@ -23,6 +23,7 @@ interface TimeLogTableProps {
   logs: TimeLogEntry[];
   currentUserName?: string; 
   userRole?: UserProfile['role']; 
+  displayDate: Date; // Added prop for the date being displayed
 }
 
 function formatDuration(startTime: Date, endTime: Date | null): string {
@@ -45,23 +46,23 @@ function formatDuration(startTime: Date, endTime: Date | null): string {
   return `${hours}h ${minutes}m ${seconds}s`;
 }
 
-export function TimeLogTable({ logs, userRole, currentUserName }: TimeLogTableProps) {
-  const [todayDateFormatted, setTodayDateFormatted] = useState<string | null>(null);
+export function TimeLogTable({ logs, userRole, currentUserName, displayDate }: TimeLogTableProps) {
+  const [formattedDisplayDate, setFormattedDisplayDate] = useState<string | null>(null);
   const entryCount = logs.length;
 
   useEffect(() => {
-    setTodayDateFormatted(format(new Date(), 'M/d/yyyy'));
-  }, []);
+    setFormattedDisplayDate(format(displayDate, 'M/d/yyyy'));
+  }, [displayDate]);
 
   const captionText = userRole === 'member' ? 
-    `A list of your time logs for today.` :
-    `A list of today's time logs for the organization.`;
+    `A list of your time logs for ${formattedDisplayDate || 'the selected date'}.` :
+    `A list of time logs for ${formattedDisplayDate || 'the selected date'} for the organization.`;
 
   return (
     <div className="w-full">
-      {todayDateFormatted ? (
+      {formattedDisplayDate ? (
         <p className="text-sm text-muted-foreground mb-4">
-          {entryCount} {entryCount === 1 ? "entry" : "entries"} for {todayDateFormatted}
+          {entryCount} {entryCount === 1 ? "entry" : "entries"} for {formattedDisplayDate}
           {userRole === 'member' && currentUserName ? ` (showing only for ${currentUserName})` : ''}
         </p>
       ) : (
@@ -71,7 +72,7 @@ export function TimeLogTable({ logs, userRole, currentUserName }: TimeLogTablePr
       )}
       {logs.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">
-          {userRole === 'member' ? 'You have no time logs for today yet.' : 'No time logs for today yet.'}
+          {userRole === 'member' ? `You have no time logs for ${formattedDisplayDate || 'this date'} yet.` : `No time logs for ${formattedDisplayDate || 'this date'} yet.`}
         </p>
       ) : (
         <ScrollArea className="h-[300px] rounded-md border">

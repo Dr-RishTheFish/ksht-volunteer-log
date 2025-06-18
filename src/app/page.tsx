@@ -211,6 +211,8 @@ export default function Home() {
   const [manualNote, setManualNote] = useState<string>('');
   const [isAddingManualEntry, setIsAddingManualEntry] = useState(false);
 
+  const [displayDate, setDisplayDate] = useState<Date>(new Date());
+
 
   const fetchAndSetUserAssociatedOrgs = async (userId: string) => {
     setIsLoadingUserAssociatedOrgs(true);
@@ -238,6 +240,7 @@ export default function Home() {
 
     setComponentState('loading');
     setTimeLogs([]); 
+    setDisplayDate(new Date());
     
     getUserOrganizationDetails(user.uid)
       .then(orgAndUserData => {
@@ -289,8 +292,10 @@ export default function Home() {
       } else {
         setTimeLogs([]);
       }
+      setDisplayDate(new Date()); // Reset display date when org changes
     } else if (componentState !== 'memberView' || !organizationDetails?.id) {
         setTimeLogs([]); 
+        setDisplayDate(new Date());
     }
   }, [user, componentState, organizationDetails?.id]);
 
@@ -333,7 +338,7 @@ export default function Home() {
 
   const isCurrentUserClockedIn = useMemo(() => {
     if (!currentUserName || componentState !== 'memberView') return false;
-    const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+    const todayDateStr = format(new Date(), 'yyyy-MM-dd'); // Clock-in/out always refers to "today"
     return timeLogs.some(log => log.name === currentUserName && log.clockOut === null && log.date === todayDateStr);
   }, [currentUserName, timeLogs, componentState]);
 
@@ -348,7 +353,7 @@ export default function Home() {
       name: currentUserName.trim(),
       clockIn: new Date(),
       clockOut: null,
-      date: format(new Date(), 'yyyy-MM-dd'),
+      date: format(new Date(), 'yyyy-MM-dd'), // Clock-in always for today
     };
     setTimeLogs(prevLogs => [...prevLogs, newLog]);
   };
@@ -361,7 +366,7 @@ export default function Home() {
     }
     setTimeLogs(prevLogs => {
       const newLogs = [...prevLogs];
-      const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+      const todayDateStr = format(new Date(), 'yyyy-MM-dd'); // Clock-out always for today
       const logIndex = newLogs.findLastIndex(
         (log) => log.name === currentUserName.trim() && log.clockOut === null && log.date === todayDateStr
       );
@@ -374,27 +379,30 @@ export default function Home() {
     });
   };
   
-  const todayLogs = useMemo(() => {
+  const displayedDateLogs = useMemo(() => {
     if (componentState !== 'memberView' || !organizationDetails?.id) return [];
-    const todayDateStr = format(new Date(), 'yyyy-MM-dd');
-    let logsToDisplay = timeLogs.filter(log => log.date === todayDateStr);
+    const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
+    let logsToDisplay = timeLogs.filter(log => log.date === selectedDateStr);
     if (userRole === 'member' && currentUserName) {
       logsToDisplay = logsToDisplay.filter(log => log.name === currentUserName);
     }
     return logsToDisplay.sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
-  }, [timeLogs, componentState, organizationDetails?.id, userRole, currentUserName]);
+  }, [timeLogs, componentState, organizationDetails?.id, userRole, currentUserName, displayDate]);
 
   const uniqueEmployeeNamesForExport = useMemo(() => {
     if (!organizationDetails?.id) return [];
+    const logsForSelectedDate = timeLogs.filter(log => log.date === format(displayDate, 'yyyy-MM-dd'));
+
     if (userRole === 'owner') {
-      const names = new Set(timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd')).map(log => log.name));
+      const names = new Set(logsForSelectedDate.map(log => log.name));
       return Array.from(names).sort((a, b) => a.localeCompare(b));
     }
-    if (currentUserName && timeLogs.some(log => log.name === currentUserName && log.date === format(new Date(), 'yyyy-MM-dd'))) {
+    // For members, only their name if they have logs on the selected date
+    if (currentUserName && logsForSelectedDate.some(log => log.name === currentUserName)) {
       return [currentUserName];
     }
     return [];
-  }, [timeLogs, userRole, currentUserName, organizationDetails?.id]);
+  }, [timeLogs, userRole, currentUserName, organizationDetails?.id, displayDate]);
 
   const formatDurationForExport = (startTime: Date, endTime: Date | null): string => {
     if (!endTime) return 'In Progress';
@@ -410,17 +418,18 @@ export default function Home() {
     if (!organizationDetails?.id) return;
     let logsToExport: TimeLogEntry[];
     let fileNamePart: string;
-    const allTodayLogsForCurrentOrg = timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd'));
+    const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
+    const logsForSelectedDateInCurrentOrg = timeLogs.filter(log => log.date === selectedDateStr);
 
     if (userRole === 'member' && currentUserName) {
-        logsToExport = allTodayLogsForCurrentOrg.filter(log => log.name === currentUserName);
+        logsToExport = logsForSelectedDateInCurrentOrg.filter(log => log.name === currentUserName);
         fileNamePart = currentUserName.replace(/\s+/g, '_');
     } else if (userRole === 'owner') {
         if (selectedExportOption === ALL_EMPLOYEES_OPTION) {
-            logsToExport = [...allTodayLogsForCurrentOrg].sort((a, b) => a.name.localeCompare(b.name));
+            logsToExport = [...logsForSelectedDateInCurrentOrg].sort((a, b) => a.name.localeCompare(b.name));
             fileNamePart = "All_Employees";
         } else {
-            logsToExport = allTodayLogsForCurrentOrg.filter(log => log.name === selectedExportOption);
+            logsToExport = logsForSelectedDateInCurrentOrg.filter(log => log.name === selectedExportOption);
             fileNamePart = selectedExportOption.replace(/\s+/g, '_');
         }
     } else {
@@ -428,8 +437,8 @@ export default function Home() {
         return;
     }
     if (logsToExport.length === 0) {
-        const forWhom = userRole === 'member' ? currentUserName : (selectedExportOption === ALL_EMPLOYEES_OPTION ? `today's entries for ${organizationDetails.name}` : selectedExportOption);
-        toast({ title: "No Data", description: `There are no time entries for ${forWhom} to export.`, variant: "destructive" });
+        const forWhom = userRole === 'member' ? currentUserName : (selectedExportOption === ALL_EMPLOYEES_OPTION ? `entries for ${organizationDetails.name} on ${selectedDateStr}` : selectedExportOption);
+        toast({ title: "No Data", description: `There are no time entries for ${forWhom} to export for ${selectedDateStr}.`, variant: "destructive" });
         return;
     }
     const dataToExport = logsToExport.map(log => ({
@@ -443,32 +452,32 @@ export default function Home() {
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Time Logs');
-    const todayDateFileName = format(new Date(), 'yyyy-MM-dd');
-    XLSX.writeFile(workbook, `TimeLogs_${fileNamePart}_${organizationDetails?.name.replace(/\s+/g, '_') || 'Org'}_${todayDateFileName}.xlsx`);
-    toast({ title: "Export Successful", description: `Time entries exported for ${fileNamePart}.` });
+    
+    XLSX.writeFile(workbook, `TimeLogs_${fileNamePart}_${organizationDetails?.name.replace(/\s+/g, '_') || 'Org'}_${selectedDateStr}.xlsx`);
+    toast({ title: "Export Successful", description: `Time entries for ${fileNamePart} on ${selectedDateStr} exported.` });
   };
 
   const confirmClearEntries = () => {
     if (!organizationDetails?.id) return;
     let clearedCount = 0;
-    const todayDateStr = format(new Date(), 'yyyy-MM-dd');
+    const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
     if (userRole === 'member' && currentUserName) {
-      const userLogsForToday = timeLogs.filter(log => log.name === currentUserName && log.date === todayDateStr);
-      clearedCount = userLogsForToday.length;
-      setTimeLogs(prevLogs => prevLogs.filter(log => !(log.name === currentUserName && log.date === todayDateStr)));
+      const userLogsForSelectedDate = timeLogs.filter(log => log.name === currentUserName && log.date === selectedDateStr);
+      clearedCount = userLogsForSelectedDate.length;
+      setTimeLogs(prevLogs => prevLogs.filter(log => !(log.name === currentUserName && log.date === selectedDateStr)));
       if (clearedCount > 0) {
-        toast({ title: "Entries Cleared", description: `Your ${clearedCount} time entr${clearedCount === 1 ? 'y' : 'ies'} for today in ${organizationDetails.name} have been cleared from local storage.` });
+        toast({ title: "Entries Cleared", description: `Your ${clearedCount} time entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationDetails.name} have been cleared.` });
       } else {
-        toast({ title: "No Entries", description: `You had no time entries for today in ${organizationDetails.name} to clear.` });
+        toast({ title: "No Entries", description: `You had no time entries for ${selectedDateStr} in ${organizationDetails.name} to clear.` });
       }
     } else if (userRole === 'owner') {
-      const logsForTodayInOrg = timeLogs.filter(log => log.date === todayDateStr);
-      clearedCount = logsForTodayInOrg.length;
-      setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== todayDateStr)); 
+      const logsForSelectedDateInOrg = timeLogs.filter(log => log.date === selectedDateStr);
+      clearedCount = logsForSelectedDateInOrg.length;
+      setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== selectedDateStr)); 
       if (clearedCount > 0) {
-        toast({ title: "All Entries Cleared", description: `All ${clearedCount} time entr${clearedCount === 1 ? 'y' : 'ies'} for today in ${organizationDetails.name} have been cleared from local storage.` });
+        toast({ title: "All Entries Cleared", description: `All ${clearedCount} time entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationDetails.name} have been cleared.` });
       } else {
-        toast({ title: "No Entries", description: `There were no time entries for today in ${organizationDetails.name} to clear.` });
+        toast({ title: "No Entries", description: `There were no time entries for ${selectedDateStr} in ${organizationDetails.name} to clear.` });
       }
     } else {
       toast({ title: "Error", description: "Cannot determine clear scope.", variant: "destructive" });
@@ -493,6 +502,7 @@ export default function Home() {
     setComponentState('memberView');
     setShowInviteCodeCreatedCard(false);
     setTimeLogs([]); 
+    setDisplayDate(new Date());
   };
 
   const handleReturnToOrgSelectionList = () => {
@@ -504,6 +514,7 @@ export default function Home() {
     setUserRole(null);
     setShowInviteCodeCreatedCard(false);
     setTimeLogs([]);
+    setDisplayDate(new Date());
   };
 
   const handleDeleteOrgClicked = (org: Organization) => {
@@ -524,6 +535,8 @@ export default function Home() {
         setUserRole(null);
         setComponentState('orgSelection'); 
         setOrgSelectionSubView('list');
+        setTimeLogs([]);
+        setDisplayDate(new Date());
       }
     } catch (error: any) {
       toast({ title: 'Error Deleting Organization', description: error.message || 'Could not delete organization.', variant: 'destructive' });
@@ -577,11 +590,14 @@ export default function Home() {
       };
 
       setTimeLogs(prevLogs => [...prevLogs, newLog].sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime()));
-      toast({ title: "Manual Entry Added", description: `Time log added for ${selectedEmployee.displayName}.` });
+      toast({ title: "Manual Entry Added", description: `Time log added for ${selectedEmployee.displayName} on ${dateStr}.` });
 
       setManualClockInTime('');
       setManualClockOutTime('');
       setManualNote('');
+      // Optionally reset manualDate or keep it for next entry
+      // setManualDate(new Date()); 
+      // setManualSelectedEmployeeId(organizationMembers.length > 0 ? organizationMembers[0].uid : '');
     } catch (error) {
       console.error("Error processing manual time entry:", error);
       toast({ title: "Error Adding Entry", description: "Could not add manual time entry.", variant: "destructive"});
@@ -589,6 +605,30 @@ export default function Home() {
       setIsAddingManualEntry(false);
     }
   };
+
+  // Calculate disabled state for export button
+  const exportDisabled = useMemo(() => {
+    if (userRole === 'member') {
+      return displayedDateLogs.filter(log => log.name === currentUserName).length === 0;
+    } else if (userRole === 'owner') {
+      if (selectedExportOption === ALL_EMPLOYEES_OPTION) {
+        return displayedDateLogs.length === 0;
+      } else {
+        return displayedDateLogs.filter(log => log.name === selectedExportOption).length === 0;
+      }
+    }
+    return true; // Default to disabled if role is unclear
+  }, [userRole, displayedDateLogs, currentUserName, selectedExportOption]);
+
+  // Calculate disabled state for clear button
+  const clearDisabled = useMemo(() => {
+     if (userRole === 'member') {
+      return displayedDateLogs.filter(log => log.name === currentUserName).length === 0;
+    } else if (userRole === 'owner') {
+      return displayedDateLogs.length === 0;
+    }
+    return true;
+  }, [userRole, displayedDateLogs, currentUserName]);
 
 
   if (componentState === 'loading' || authLoading) {
@@ -613,7 +653,7 @@ export default function Home() {
       {componentState === 'memberView' && organizationDetails && (
         <>
           <p className="text-lg sm:text-xl text-muted-foreground">Organization: {organizationDetails.name} ({currentUserName || 'User'} - {userRole === 'owner' ? 'Owner' : userRole === 'member' ? 'Member' : 'Role not set'})</p>
-          {currentDateTime && ( <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg"><CalendarDays className="h-5 w-5 sm:h-6 sm:w-6" /><span>{currentDateTime}</span></div> )}
+          {currentDateTime && ( <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg"><CalendarDays className="mr-2 h-5 w-5 sm:h-6 sm:w-6" /><span>{currentDateTime}</span></div> )}
         </>
       )}
        {componentState === 'orgSelection' && (
@@ -694,6 +734,7 @@ export default function Home() {
                   setComponentState('memberView');
                   setShowInviteCodeCreatedCard(true);
                   updateUserActiveOrganization(user.uid, org.id, 'owner');
+                  fetchAndSetUserAssociatedOrgs(user.uid); // Refresh list
                 }}
                 onBack={() => setOrgSelectionSubView('list')}
               />
@@ -712,6 +753,7 @@ export default function Home() {
                   setComponentState('memberView');
                   setShowInviteCodeCreatedCard(false);
                   updateUserActiveOrganization(user.uid, org.id, 'member');
+                  fetchAndSetUserAssociatedOrgs(user.uid); // Refresh list
                 }}
                 onBack={() => setOrgSelectionSubView('list')}
               />
@@ -763,7 +805,7 @@ export default function Home() {
       )}
 
       <Card className="w-full max-w-md shadow-xl rounded-xl">
-        <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-xl sm:text-2xl font-semibold"><User className="h-6 w-6 text-primary" />Time Tracking Controls</CardTitle></CardHeader>
+        <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-xl sm:text-2xl font-semibold"><User className="mr-2 h-6 w-6 text-primary" />Time Tracking Controls</CardTitle></CardHeader>
         <CardContent className="space-y-6">
           <div>
             <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Your Name (for time entry)</Label>
@@ -879,39 +921,63 @@ export default function Home() {
       )}
 
       <Card className="w-full max-w-2xl shadow-xl rounded-xl">
-        <CardHeader><CardTitle className="text-xl sm:text-2xl font-semibold">Today's Time Entries</CardTitle></CardHeader>
-        <CardContent className="pt-0"><TimeLogTable logs={todayLogs} currentUserName={currentUserName} userRole={userRole} /></CardContent>
+        <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <CardTitle className="text-xl sm:text-2xl font-semibold">Time Entries for {format(displayDate, "PPP")}</CardTitle>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={"outline"}
+                className="w-auto justify-start text-left font-normal"
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                <span>Change Date</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={displayDate}
+                onSelect={(date) => {if (date) setDisplayDate(date);}}
+                disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </CardHeader>
+        <CardContent className="pt-0">
+            <TimeLogTable logs={displayedDateLogs} currentUserName={currentUserName} userRole={userRole} displayDate={displayDate} />
+        </CardContent>
       </Card>
 
       <Card className="w-full max-w-2xl shadow-xl rounded-xl">
-        <CardHeader><CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Data Management</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Data Management for {format(displayDate, "PPP")}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {userRole === 'owner' && (
             <div className="space-y-2">
-              <Label htmlFor="export-select">Select Employee to Export (Today's Entries for {organizationDetails?.name})</Label>
+              <Label htmlFor="export-select">Select Employee to Export ({organizationDetails?.name} - {format(displayDate, "PPP")})</Label>
               <Select value={selectedExportOption} onValueChange={setSelectedExportOption}>
                 <SelectTrigger id="export-select" className="w-full">
                   <SelectValue placeholder="Select an option" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL_EMPLOYEES_OPTION}>All Employees</SelectItem>
-                  {uniqueEmployeeNamesForExport.map(empName => (
+                  {uniqueEmployeeNamesForExport.length > 0 ? uniqueEmployeeNamesForExport.map(empName => (
                     <SelectItem key={empName} value={empName}>
                       {empName}
                     </SelectItem>
-                  ))}
+                  )) : <SelectItem value="no_entries" disabled>No entries on this date</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
           )}
-          {userRole === 'member' && ( <p className="text-sm text-muted-foreground">You can export your own time entries for {organizationDetails?.name}.</p> )}
-          <Button onClick={handleExport} variant="outline" className="w-full" disabled={(userRole === 'member' && todayLogs.filter(log => log.name === currentUserName).length === 0) || (userRole === 'owner' && timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd')).length === 0 )}>
+          {userRole === 'member' && ( <p className="text-sm text-muted-foreground">You can export your own time entries for {organizationDetails?.name} on {format(displayDate, "PPP")}.</p> )}
+          <Button onClick={handleExport} variant="outline" className="w-full" disabled={exportDisabled}>
             <Download className="mr-2 h-5 w-5" /> Export to XLSX {userRole === 'member' ? `(My Entries)` : ''}
           </Button>
           <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" className="w-full" disabled={(userRole === 'member' && todayLogs.filter(log => log.name === currentUserName).length === 0) || (userRole === 'owner' && timeLogs.filter(log => log.date === format(new Date(), 'yyyy-MM-dd')).length === 0 )}>
-                <Trash2 className="mr-2 h-5 w-5" /> Clear {userRole === 'member' ? `My Entries for Today (Org: ${organizationDetails?.name || 'Current'})` : `All Entries for Today (Org: ${organizationDetails?.name || 'Current'})`}
+              <Button variant="destructive" className="w-full" disabled={clearDisabled}>
+                <Trash2 className="mr-2 h-5 w-5" /> Clear {userRole === 'member' ? `My Entries for ${format(displayDate, "PPP")}` : `All Entries for ${format(displayDate, "PPP")}`} (Org: {organizationDetails?.name || 'Current'})
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -919,7 +985,7 @@ export default function Home() {
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This action cannot be undone. This will permanently delete 
-                  {userRole === 'member' ? ` your time log entries for today in "${organizationDetails?.name}"` : ` all time log entries for today in "${organizationDetails?.name}"`}
+                  {userRole === 'member' ? ` your time log entries for ${format(displayDate, "PPP")} in "${organizationDetails?.name}"` : ` all time log entries for ${format(displayDate, "PPP")} in "${organizationDetails?.name}"`}
                   from your browser&apos;s local storage.
                 </AlertDialogDescription>
               </AlertDialogHeader>
