@@ -31,7 +31,7 @@ export default function Home() {
         setTimeLogs(parsedLogs);
       } catch (error) {
         console.error("Failed to parse logs from localStorage", error);
-        localStorage.removeItem('timeLogs'); 
+        localStorage.removeItem('timeLogs');
       }
     }
   }, []);
@@ -96,6 +96,7 @@ export default function Home() {
         newLogs[logIndex] = { ...newLogs[logIndex], clockOut: new Date() };
         return newLogs;
       }
+      // This toast should ideally not be reached if isCurrentUserClockedIn is accurate.
       toast({ title: 'Error', description: 'Could not find active clock-in record for today.', variant: 'destructive' });
       return prevLogs;
     });
@@ -104,11 +105,11 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center justify-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       <div className="text-center space-y-4 w-full max-w-2xl">
-        <Image 
-          src="/logo.png"
-          alt="Big Brainbox Logo" 
-          width={100} 
-          height={100} 
+        <Image
+          src="/Stickers.png"
+          alt="Big Brainbox Logo"
+          width={100}
+          height={100}
           className="mx-auto rounded-full shadow-lg"
         />
         <h1 className="text-4xl sm:text-5xl font-bold">
@@ -146,7 +147,7 @@ export default function Home() {
               className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary"
             />
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <Button
               onClick={handleClockIn}
