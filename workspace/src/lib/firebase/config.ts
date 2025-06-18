@@ -99,7 +99,7 @@ if (crucialEnvVarsMissing) {
   //   alert("Firebase is not properly configured. Some features may not work.");
   // }
 } else {
-   console.log("Firebase config check complete. Auth and Firestore services should be available if enabled in your Firebase project console.");
+   console.log("Firebase config check complete. Auth and Firestore services should be available if enabled in your Firebase project console and security rules allow access.");
 }
 
 
