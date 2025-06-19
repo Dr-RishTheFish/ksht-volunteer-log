@@ -16,26 +16,27 @@ const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
 let crucialEnvVarsMissing = false;
 
 if (!apiKey) {
-  console.error("Firebase Error: NEXT_PUBLIC_FIREBASE_API_KEY is missing in your .env.local file. Please add it and restart your development server.");
+  console.error("Firebase Config Error: NEXT_PUBLIC_FIREBASE_API_KEY is missing. Check your .env.local file and restart the server.");
   crucialEnvVarsMissing = true;
 }
 if (!authDomain) {
-  console.error("Firebase Error: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN is missing in your .env.local file. Please add it and restart your development server.");
+  console.error("Firebase Config Error: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN is missing. Check your .env.local file and restart the server.");
   crucialEnvVarsMissing = true;
 }
 if (!projectId) {
-  console.error("Firebase Error: NEXT_PUBLIC_FIREBASE_PROJECT_ID is missing in your .env.local file. Please add it and restart your development server.");
+  console.error("Firebase Config Error: NEXT_PUBLIC_FIREBASE_PROJECT_ID is missing. Check your .env.local file and restart the server.");
   crucialEnvVarsMissing = true;
 }
-// Optional vars, don't mark as crucial if missing
+
+// Optional vars, don't mark as crucial if missing but good to warn
 if (!storageBucket) {
-  console.warn("Firebase Warning: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is missing. This might be needed for Firebase Storage features.");
+  console.warn("Firebase Config Warning: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is missing. This might be needed for Firebase Storage features.");
 }
 if (!messagingSenderId) {
-  console.warn("Firebase Warning: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID is missing. This might be needed for Firebase Cloud Messaging.");
+  console.warn("Firebase Config Warning: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID is missing. This might be needed for Firebase Cloud Messaging.");
 }
 if (!appId) {
-  console.warn("Firebase Warning: NEXT_PUBLIC_FIREBASE_APP_ID is missing. This might be needed for certain Firebase integrations or analytics.");
+  console.warn("Firebase Config Warning: NEXT_PUBLIC_FIREBASE_APP_ID is missing. This might be needed for certain Firebase integrations or analytics.");
 }
 
 
@@ -57,45 +58,47 @@ if (!crucialEnvVarsMissing) {
   if (!getApps().length) {
     try {
       app = initializeApp(firebaseConfig);
-      console.log("Firebase app initialized successfully.");
+      console.log("Firebase app initialized successfully (New Instance). Project ID:", projectId);
     } catch (error) {
       console.error("Firebase initialization error:", error);
+      console.error("This usually means your Firebase config values in .env.local might be present but incorrect (e.g., invalid API key format, non-existent project ID), or the project itself has issues (e.g., not properly set up in Firebase console).");
       crucialEnvVarsMissing = true; 
     }
   } else {
-    app = getApp();
-    console.log("Existing Firebase app retrieved.");
+    app = getApp(); // Get default app if already initialized
+    console.log("Existing Firebase app retrieved. Project ID:", app.options.projectId);
   }
 
   if (app) {
     try {
       authInstance = getAuth(app);
-      console.log("Firebase Auth instance retrieved successfully.");
+      console.log("Firebase Auth instance retrieved/initialized successfully.");
     } catch (error) {
         console.error("Firebase getAuth() error:", error);
         crucialEnvVarsMissing = true; 
     }
     try {
       dbInstance = getFirestore(app); 
-      console.log("Firebase Firestore instance retrieved successfully.");
+      console.log("Firebase Firestore instance retrieved/initialized successfully.");
     } catch (error) {
         console.error("Firebase getFirestore() error:", error);
         crucialEnvVarsMissing = true; 
     }
   } else if (!crucialEnvVarsMissing) { 
-    console.error("Firebase app instance is undefined after initialization/retrieval attempt, despite no crucial vars reported missing initially.");
+    // This case should ideally not be reached if crucialEnvVarsMissing was false
+    console.error("Firebase app instance is undefined after initialization/retrieval attempt, despite no crucial vars reported missing initially. This is unexpected and likely points to an issue with the firebaseConfig object passed to initializeApp, even if individual variables seemed present.");
     crucialEnvVarsMissing = true;
   }
 }
 
 if (crucialEnvVarsMissing) {
-  const errorMessage = "Firebase is not configured correctly due to missing crucial environment variables or initialization errors (check console for specifics). Authentication and Firestore features will not work. Please ensure your .env.local file is correctly set up with ALL required NEXT_PUBLIC_ variables and you have restarted your development server.";
+  const errorMessage = "CRITICAL Firebase Setup Issue: Firebase is not configured correctly, either due to missing/incorrect environment variables (check .env.local and ensure it's loaded by restarting server) or issues initializing Firebase services (see console for specifics). Authentication and Firestore features WILL NOT WORK. Exported 'auth' and 'db' instances will be undefined.";
   console.error(errorMessage);
-  // Ensure instances are undefined if setup failed
+  // Ensure authInstance and dbInstance are indeed undefined if setup failed
   authInstance = undefined;
   dbInstance = undefined;
 } else {
-   console.log("Firebase config loaded. Auth and Firestore should be available.");
+   console.log("Firebase config check complete. Auth and Firestore services should be available if enabled in your Firebase project console and security rules allow access.");
 }
 
 
