@@ -5,7 +5,6 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import type { UserProfile } from '@/interfaces/User';
 import type { Organization } from '@/interfaces/Organization';
 
-// Function to generate a simple random alphanumeric invite code
 const generateInviteCode = (length: number = 8): string => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';
@@ -247,7 +246,7 @@ export const getUserAssociatedOrganizations = async (userId: string): Promise<Or
     const organizationsMap = new Map<string, Organization>();
 
     const processSnapshot = (snapshot: typeof ownedOrgsSnapshot) => {
-      snapshot.forEach(docSnap => { // Renamed doc to docSnap to avoid conflict with outer doc
+      snapshot.forEach(docSnap => { 
         const data = docSnap.data();
         organizationsMap.set(docSnap.id, {
           id: docSnap.id,
@@ -328,6 +327,8 @@ export const deleteOrganization = async (orgId: string): Promise<void> => {
   try {
     await deleteDoc(orgRef);
     console.log(`[firestoreService] Successfully deleted organization: ${orgId}`);
+    // Note: This does not automatically update user profiles that might reference this orgId.
+    // That would require iterating through all users, which is generally not done on the client.
   } catch (error) {
     console.error(`[firestoreService] Error deleting organization ${orgId}:`, error);
     throw error;
@@ -371,7 +372,6 @@ export const getOrganizationMembers = async (orgId: string): Promise<UserProfile
       querySnapshot.forEach((userDocSnap) => {
         if (userDocSnap.exists()) {
           const profileData = userDocSnap.data() as UserProfile;
-          // Ensure displayName is sensible
           if (!profileData.displayName) {
             profileData.displayName = profileData.email?.split('@')[0] || `User ${profileData.uid.substring(0,6)}`;
           }
@@ -383,3 +383,5 @@ export const getOrganizationMembers = async (orgId: string): Promise<UserProfile
   
   return memberProfiles.sort((a, b) => a.displayName.localeCompare(b.displayName));
 };
+
+    

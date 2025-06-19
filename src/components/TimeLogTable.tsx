@@ -23,7 +23,7 @@ interface TimeLogTableProps {
   logs: TimeLogEntry[];
   currentUserName?: string; 
   userRole?: UserProfile['role']; 
-  displayDate: Date; // Added prop for the date being displayed
+  displayDate: Date; 
 }
 
 function formatDuration(startTime: Date, endTime: Date | null): string {
@@ -129,3 +129,5 @@ export function TimeLogTable({ logs, userRole, currentUserName, displayDate }: T
     </div>
   );
 }
+
+    

@@ -1,3 +1,4 @@
+
 export interface TimeLogEntry {
   id: string;
   name: string;
@@ -6,3 +7,5 @@ export interface TimeLogEntry {
   date: string; // Format: YYYY-MM-DD
   note?: string;
 }
+
+    

@@ -15,7 +15,6 @@ import { signInWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, Go
 import { LogIn } from 'lucide-react';
 import { createUserDocument } from '@/lib/firebase/firestoreService';
 
-// Google Icon SVG
 const GoogleIcon = () => (
   <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2">
     <title>Google</title>
@@ -58,7 +57,7 @@ export default function LoginPage() {
       });
       return;
     }
-    setIsLoading(true); // Reuse isLoading for general activity indication
+    setIsLoading(true); 
     try {
       await sendPasswordResetEmail(auth, email);
       toast({
@@ -197,3 +196,5 @@ export default function LoginPage() {
     </main>
   );
 }
+
+    

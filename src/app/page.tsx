@@ -292,12 +292,14 @@ export default function Home() {
       } else {
         setTimeLogs([]);
       }
-      // Reset display date only when org ID truly changes to a new one
-      // This avoids resetting the date if the effect re-runs due to other state changes
-      // but the org ID remains the same.
-      if (organizationDetails?.id !== (organizationDetails && organizationDetails.id)) {
+      
+      // Check if organization ID actually changed to avoid unnecessary date reset
+      let previousOrgId: string | null = null;
+      if (organizationDetails?.id !== previousOrgId) {
          setDisplayDate(new Date());
+         previousOrgId = organizationDetails.id;
       }
+
     } else if (componentState !== 'memberView' || !organizationDetails?.id) {
         setTimeLogs([]); 
         setDisplayDate(new Date());
@@ -321,13 +323,12 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch organization members if user is owner and in memberView
   useEffect(() => {
     if (componentState === 'memberView' && userRole === 'owner' && organizationDetails?.id) {
       getOrganizationMembers(organizationDetails.id)
         .then(members => {
           setOrganizationMembers(members);
-          if (members.length > 0 && !manualSelectedEmployeeId) {
+          if (members.length > 0 && (!manualSelectedEmployeeId || !members.find(m => m.uid === manualSelectedEmployeeId))) {
             setManualSelectedEmployeeId(members[0].uid); 
           }
         })
@@ -344,7 +345,7 @@ export default function Home() {
 
   const isCurrentUserClockedIn = useMemo(() => {
     if (!currentUserName || componentState !== 'memberView') return false;
-    const todayDateStr = format(new Date(), 'yyyy-MM-dd'); // Clock-in/out always refers to "today"
+    const todayDateStr = format(new Date(), 'yyyy-MM-dd'); 
     return timeLogs.some(log => log.name === currentUserName && log.clockOut === null && log.date === todayDateStr);
   }, [currentUserName, timeLogs, componentState]);
 
@@ -359,7 +360,7 @@ export default function Home() {
       name: currentUserName.trim(),
       clockIn: new Date(),
       clockOut: null,
-      date: format(new Date(), 'yyyy-MM-dd'), // Clock-in always for today
+      date: format(new Date(), 'yyyy-MM-dd'), 
     };
     setTimeLogs(prevLogs => [...prevLogs, newLog]);
   };
@@ -372,7 +373,7 @@ export default function Home() {
     }
     setTimeLogs(prevLogs => {
       const newLogs = [...prevLogs];
-      const todayDateStr = format(new Date(), 'yyyy-MM-dd'); // Clock-out always for today
+      const todayDateStr = format(new Date(), 'yyyy-MM-dd'); 
       const logIndex = newLogs.findLastIndex(
         (log) => log.name === currentUserName.trim() && log.clockOut === null && log.date === todayDateStr
       );
@@ -403,7 +404,6 @@ export default function Home() {
       const names = new Set(logsForSelectedDate.map(log => log.name));
       return Array.from(names).sort((a, b) => a.localeCompare(b));
     }
-    // For members, only their name if they have logs on the selected date
     if (currentUserName && logsForSelectedDate.some(log => log.name === currentUserName)) {
       return [currentUserName];
     }
@@ -508,7 +508,6 @@ export default function Home() {
     setComponentState('memberView');
     setShowInviteCodeCreatedCard(false);
     setTimeLogs([]); 
-    // Ensure displayDate is reset here when explicitly selecting an organization
     setDisplayDate(new Date());
   };
 
@@ -602,9 +601,6 @@ export default function Home() {
       setManualClockInTime('');
       setManualClockOutTime('');
       setManualNote('');
-      // Optionally reset manualDate or keep it for next entry
-      // setManualDate(new Date()); 
-      // setManualSelectedEmployeeId(organizationMembers.length > 0 ? organizationMembers[0].uid : '');
     } catch (error) {
       console.error("Error processing manual time entry:", error);
       toast({ title: "Error Adding Entry", description: "Could not add manual time entry.", variant: "destructive"});
@@ -613,7 +609,6 @@ export default function Home() {
     }
   };
 
-  // Calculate disabled state for export button
   const exportDisabled = useMemo(() => {
     if (userRole === 'member') {
       return displayedDateLogs.filter(log => log.name === currentUserName).length === 0;
@@ -624,10 +619,9 @@ export default function Home() {
         return displayedDateLogs.filter(log => log.name === selectedExportOption).length === 0;
       }
     }
-    return true; // Default to disabled if role is unclear
+    return true; 
   }, [userRole, displayedDateLogs, currentUserName, selectedExportOption]);
 
-  // Calculate disabled state for clear button
   const clearDisabled = useMemo(() => {
      if (userRole === 'member') {
       return displayedDateLogs.filter(log => log.name === currentUserName).length === 0;
@@ -651,7 +645,15 @@ export default function Home() {
   const commonHeader = (
     <div className="text-center space-y-4 w-full max-w-2xl mb-8">
       <div className="flex justify-between items-center w-full">
-        <Image src="/Stickers.png" alt="Big Brainbox Logo" width={80} height={80} className="rounded-full shadow-lg" data-ai-hint="logo sticker"/>
+        <Image 
+          src="/Stickers.png" 
+          alt="Big Brainbox Logo" 
+          width={80} 
+          height={80} 
+          className="rounded-full shadow-lg" 
+          data-ai-hint="logo sticker"
+          priority={componentState !== 'memberView'} // Only prioritize if not on main member view potentially
+        />
         <Button onClick={logout} variant="outline" size="sm"><LogOut className="mr-2 h-4 w-4" /> Logout</Button>
       </div>
       <h1 className="text-4xl sm:text-5xl font-bold">
@@ -741,7 +743,7 @@ export default function Home() {
                   setComponentState('memberView');
                   setShowInviteCodeCreatedCard(true);
                   updateUserActiveOrganization(user.uid, org.id, 'owner');
-                  fetchAndSetUserAssociatedOrgs(user.uid); // Refresh list
+                  fetchAndSetUserAssociatedOrgs(user.uid); 
                 }}
                 onBack={() => setOrgSelectionSubView('list')}
               />
@@ -760,7 +762,7 @@ export default function Home() {
                   setComponentState('memberView');
                   setShowInviteCodeCreatedCard(false);
                   updateUserActiveOrganization(user.uid, org.id, 'member');
-                  fetchAndSetUserAssociatedOrgs(user.uid); // Refresh list
+                  fetchAndSetUserAssociatedOrgs(user.uid); 
                 }}
                 onBack={() => setOrgSelectionSubView('list')}
               />
@@ -787,7 +789,6 @@ export default function Home() {
     );
   }
   
-  // componentState === 'memberView'
   return (
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       {commonHeader}
@@ -1029,3 +1030,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
