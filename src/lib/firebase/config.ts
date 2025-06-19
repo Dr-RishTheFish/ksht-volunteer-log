@@ -91,9 +91,9 @@ if (!crucialEnvVarsMissing) {
 if (crucialEnvVarsMissing) {
   const errorMessage = "Firebase is not configured correctly due to missing crucial environment variables or initialization errors (check console for specifics). Authentication and Firestore features will not work. Please ensure your .env.local file is correctly set up with ALL required NEXT_PUBLIC_ variables and you have restarted your development server.";
   console.error(errorMessage);
-  if (typeof window !== 'undefined' && (!authInstance || !dbInstance)) {
-    // Optionally, display an error to the user in the UI, though console is primary for dev
-  }
+  // Ensure instances are undefined if setup failed
+  authInstance = undefined;
+  dbInstance = undefined;
 } else {
    console.log("Firebase config loaded. Auth and Firestore should be available.");
 }
