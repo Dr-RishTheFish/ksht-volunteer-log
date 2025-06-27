@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Loader2, Edit3, Calendar as CalendarIcon } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, Loader2, Edit3, Calendar as CalendarIcon } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
 import {
@@ -34,8 +34,6 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
 
 const ALL_VOLUNTEERS_OPTION = "__ALL_VOLUNTEERS__";
 
@@ -46,19 +44,16 @@ const MOCK_MEMBERS = [
 ];
 
 export default function Home() {
-  const { user, loading: authLoading, logout } = useAuth();
-  const router = useRouter();
-
-  const [currentUserName, setCurrentUserName] = useState<string>('');
+  const [currentUserName, setCurrentUserName] = useState<string>('Test Owner');
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [selectedExportOption, setSelectedExportOption] = useState<string>(ALL_VOLUNTEERS_OPTION);
   
-  // Hardcoded values for local testing without a database
+  // Hardcoded values for testing without auth/db
   const organizationName = "KSHT";
-  const userRole = 'owner'; // Assume 'owner' role to show all features
+  const userRole = 'owner';
 
   const [manualSelectedVolunteerId, setManualSelectedVolunteerId] = useState<string>('');
   const [manualDate, setManualDate] = useState<Date | undefined>(new Date());
@@ -68,16 +63,6 @@ export default function Home() {
   const [isAddingManualEntry, setIsAddingManualEntry] = useState(false);
 
   const [displayDate, setDisplayDate] = useState<Date>(new Date());
-
-  // Effect for handling auth state
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-    setCurrentUserName(user.displayName || user.email?.split('@')[0] || 'User');
-  }, [user, authLoading, router]);
 
   // Effect for loading logs from localStorage on mount
   useEffect(() => {
@@ -169,23 +154,16 @@ export default function Home() {
   const displayedDateLogs = useMemo(() => {
     const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
     let logsToDisplay = timeLogs.filter(log => log.date === selectedDateStr);
-    if (userRole === 'member' && currentUserName) {
-      logsToDisplay = logsToDisplay.filter(log => log.name === currentUserName);
-    }
+    // Since we hardcode 'owner' role, all logs for the date will be shown.
+    // If we wanted to simulate a 'member', we would filter here.
     return logsToDisplay.sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
-  }, [timeLogs, userRole, currentUserName, displayDate]);
+  }, [timeLogs, displayDate]);
 
   const uniqueVolunteerNamesForExport = useMemo(() => {
     const logsForSelectedDate = timeLogs.filter(log => log.date === format(displayDate, 'yyyy-MM-dd'));
-    if (userRole === 'owner') {
-      const names = new Set(logsForSelectedDate.map(log => log.name));
-      return Array.from(names).sort((a, b) => a.localeCompare(b));
-    }
-    if (currentUserName && logsForSelectedDate.some(log => log.name === currentUserName)) {
-      return [currentUserName];
-    }
-    return [];
-  }, [timeLogs, userRole, currentUserName, displayDate]);
+    const names = new Set(logsForSelectedDate.map(log => log.name));
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [timeLogs, displayDate]);
 
   const formatDurationForExport = (startTime: Date, endTime: Date | null): string => {
     if (!endTime) return 'In Progress';
@@ -203,23 +181,16 @@ export default function Home() {
     const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
     const logsForSelectedDate = timeLogs.filter(log => log.date === selectedDateStr);
 
-    if (userRole === 'member' && currentUserName) {
-        logsToExport = logsForSelectedDate.filter(log => log.name === currentUserName);
-        fileNamePart = currentUserName.replace(/\s+/g, '_');
-    } else if (userRole === 'owner') {
-        if (selectedExportOption === ALL_VOLUNTEERS_OPTION) {
-            logsToExport = [...logsForSelectedDate].sort((a, b) => a.name.localeCompare(b.name));
-            fileNamePart = "All_Volunteers";
-        } else {
-            logsToExport = logsForSelectedDate.filter(log => log.name === selectedExportOption);
-            fileNamePart = selectedExportOption.replace(/\s+/g, '_');
-        }
+    if (selectedExportOption === ALL_VOLUNTEERS_OPTION) {
+        logsToExport = [...logsForSelectedDate].sort((a, b) => a.name.localeCompare(b.name));
+        fileNamePart = "All_Volunteers";
     } else {
-        toast({ title: "Error", description: "Cannot determine export scope.", variant: "destructive" });
-        return;
+        logsToExport = logsForSelectedDate.filter(log => log.name === selectedExportOption);
+        fileNamePart = selectedExportOption.replace(/\s+/g, '_');
     }
+
     if (logsToExport.length === 0) {
-        const forWhom = userRole === 'member' ? currentUserName : (selectedExportOption === ALL_VOLUNTEERS_OPTION ? `entries for ${organizationName} on ${selectedDateStr}` : selectedExportOption);
+        const forWhom = selectedExportOption === ALL_VOLUNTEERS_OPTION ? `entries for ${organizationName} on ${selectedDateStr}` : selectedExportOption;
         toast({ title: "No Data", description: `There are no volunteer entries for ${forWhom} to export for ${selectedDateStr}.`, variant: "destructive" });
         return;
     }
@@ -242,25 +213,16 @@ export default function Home() {
   const confirmClearEntries = () => {
     let clearedCount = 0;
     const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
-    if (userRole === 'member' && currentUserName) {
-      const userLogsForSelectedDate = timeLogs.filter(log => log.name === currentUserName && log.date === selectedDateStr);
-      clearedCount = userLogsForSelectedDate.length;
-      setTimeLogs(prevLogs => prevLogs.filter(log => !(log.name === currentUserName && log.date === selectedDateStr)));
-      if (clearedCount > 0) {
-        toast({ title: "Entries Cleared", description: `Your ${clearedCount} volunteer entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationName} have been cleared.` });
-      } else {
-        toast({ title: "No Entries", description: `You had no volunteer entries for ${selectedDateStr} in ${organizationName} to clear.` });
-      }
-    } else if (userRole === 'owner') {
-      const logsForSelectedDateInOrg = timeLogs.filter(log => log.date === selectedDateStr);
-      clearedCount = logsForSelectedDateInOrg.length;
-      setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== selectedDateStr)); 
-      if (clearedCount > 0) {
-        toast({ title: "All Entries Cleared", description: `All ${clearedCount} volunteer entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationName} have been cleared.` });
-      } else {
-        toast({ title: "No Entries", description: `There were no volunteer entries for ${selectedDateStr} in ${organizationName} to clear.` });
-      }
+    
+    const logsForSelectedDateInOrg = timeLogs.filter(log => log.date === selectedDateStr);
+    clearedCount = logsForSelectedDateInOrg.length;
+    setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== selectedDateStr)); 
+    if (clearedCount > 0) {
+      toast({ title: "All Entries Cleared", description: `All ${clearedCount} volunteer entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationName} have been cleared.` });
+    } else {
+      toast({ title: "No Entries", description: `There were no volunteer entries for ${selectedDateStr} in ${organizationName} to clear.` });
     }
+
     setIsClearConfirmOpen(false);
   };
 
@@ -325,42 +287,20 @@ export default function Home() {
   };
 
   const exportDisabled = useMemo(() => {
-    if (userRole === 'member') {
-      return displayedDateLogs.filter(log => log.name === currentUserName).length === 0;
-    } else if (userRole === 'owner') {
-      if (selectedExportOption === ALL_VOLUNTEERS_OPTION) {
-        return displayedDateLogs.length === 0;
-      } else {
-        return displayedDateLogs.filter(log => log.name === selectedExportOption).length === 0;
-      }
+    if (selectedExportOption === ALL_VOLUNTEERS_OPTION) {
+      return displayedDateLogs.length === 0;
+    } else {
+      return displayedDateLogs.filter(log => log.name === selectedExportOption).length === 0;
     }
-    return true; 
-  }, [userRole, displayedDateLogs, currentUserName, selectedExportOption]);
+  }, [displayedDateLogs, selectedExportOption]);
 
   const clearDisabled = useMemo(() => {
-     if (userRole === 'member') {
-      return displayedDateLogs.filter(log => log.name === currentUserName).length === 0;
-    } else if (userRole === 'owner') {
-      return displayedDateLogs.length === 0;
-    }
-    return true;
-  }, [userRole, displayedDateLogs, currentUserName]);
+    return displayedDateLogs.length === 0;
+  }, [displayedDateLogs]);
 
-  if (authLoading) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-secondary/10">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </main>
-    );
-  }
-
-  if (!user) {
-    return <main className="min-h-screen flex items-center justify-center"><p>Redirecting to login...</p></main>;
-  }
-  
   const commonHeader = (
     <div className="text-center space-y-4 w-full max-w-2xl mb-8">
-      <div className="flex justify-between items-center w-full">
+      <div className="flex justify-center items-center w-full relative">
         <Image 
           src="/logo.png" 
           alt="KSHT Logo" 
@@ -370,13 +310,12 @@ export default function Home() {
           data-ai-hint="temple logo"
           priority
         />
-        <Button onClick={logout} variant="outline" size="sm"><LogOut className="mr-2 h-4 w-4" /> Logout</Button>
       </div>
       <h1 className="text-4xl sm:text-5xl font-bold">
         <span className="bg-gradient-to-r from-primary to-accent text-transparent bg-clip-text">KSHT Volunteer Log</span>
       </h1>
         <>
-          <p className="text-lg sm:text-xl text-muted-foreground">Organization: {organizationName} ({currentUserName || 'User'} - {userRole === 'owner' ? 'Owner' : 'Member'})</p>
+          <p className="text-lg sm:text-xl text-muted-foreground">Organization: {organizationName} ({currentUserName} - {userRole})</p>
           {currentDateTime && ( <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg"><CalendarDays className="mr-2 h-5 w-5 sm:h-6 sm:w-6" /><span>{currentDateTime}</span></div> )}
         </>
     </div>
@@ -391,8 +330,7 @@ export default function Home() {
         <CardContent className="space-y-6">
           <div>
             <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Your Name (for new entries)</Label>
-            <Input id="name" type="text" placeholder="Your name for clock-in" value={currentUserName || ''} readOnly className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary bg-muted/50 cursor-not-allowed"/>
-            <p className="text-xs text-muted-foreground mt-1">Logged in as: {user?.email}</p>
+            <Input id="name" type="text" placeholder="Your name for clock-in" value={currentUserName} onChange={(e) => setCurrentUserName(e.target.value)} className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary"/>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Button onClick={handleClockIn} disabled={!currentUserName.trim() || isCurrentUserClockedIn} size="lg" className="text-base py-3 h-12 rounded-md"><ArrowRightToLine className="mr-2 h-5 w-5" /> Clock In</Button>
@@ -552,23 +490,20 @@ export default function Home() {
               </Select>
             </div>
           )}
-          {userRole === 'member' && ( <p className="text-sm text-muted-foreground">You can export your own volunteer entries for {organizationName} on {format(displayDate, "PPP")}.</p> )}
           <Button onClick={handleExport} variant="outline" className="w-full" disabled={exportDisabled}>
-            <Download className="mr-2 h-5 w-5" /> Export to XLSX {userRole === 'member' ? `(My Entries)` : ''}
+            <Download className="mr-2 h-5 w-5" /> Export to XLSX
           </Button>
           <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" className="w-full" disabled={clearDisabled}>
-                <Trash2 className="mr-2 h-5 w-5" /> Clear {userRole === 'member' ? `My Entries for ${format(displayDate, "PPP")}` : `All Entries for ${format(displayDate, "PPP")}`} (Org: {organizationName})
+                <Trash2 className="mr-2 h-5 w-5" /> Clear All Entries for {format(displayDate, "PPP")}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete 
-                  {userRole === 'member' ? ` your volunteer log entries for ${format(displayDate, "PPP")} in "${organizationName}"` : ` all volunteer log entries for ${format(displayDate, "PPP")} in "${organizationName}"`}
-                  from your browser&apos;s local storage.
+                  This action cannot be undone. This will permanently delete all volunteer log entries for {format(displayDate, "PPP")} in "{organizationName}" from your browser&apos;s local storage.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
