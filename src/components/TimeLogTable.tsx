@@ -15,14 +15,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { useState, useEffect } from 'react';
-import type { UserProfile } from '@/interfaces/User';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { StickyNote } from 'lucide-react';
 
 interface TimeLogTableProps {
   logs: TimeLogEntry[];
   currentUserName?: string; 
-  userRole?: UserProfile['role']; 
+  userRole?: 'owner' | 'member' | null; 
   displayDate: Date; 
 }
 

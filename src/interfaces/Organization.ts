@@ -1,11 +1,1 @@
-
-export interface Organization {
-  id: string;
-  name: string;
-  ownerUid: string;
-  inviteCode: string;
-  createdAt: Date;
-  memberUids?: string[]; 
-}
-
-    
+// This file has been cleared as it is no longer needed for the database-free version.

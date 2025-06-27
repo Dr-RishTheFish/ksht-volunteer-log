@@ -13,7 +13,6 @@ import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase/config';
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { LogIn } from 'lucide-react';
-import { createUserDocument } from '@/lib/firebase/firestoreService';
 
 const GoogleIcon = () => (
   <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2">
@@ -81,7 +80,7 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      await createUserDocument(user, user.displayName || undefined); 
+      // No database call, just successful authentication
       toast({ title: 'Login Successful', description: `Welcome, ${user.displayName}!` });
       router.push('/');
     } catch (error: any) {

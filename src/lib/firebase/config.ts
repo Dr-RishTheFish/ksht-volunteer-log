@@ -4,7 +4,6 @@
 
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore"; 
 
 const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
@@ -52,7 +51,6 @@ const firebaseConfig = {
 
 let app: FirebaseApp | undefined = undefined;
 let authInstance: Auth | undefined = undefined;
-let dbInstance: Firestore | undefined = undefined;
 
 if (!crucialEnvVarsMissing) {
   if (!getApps().length) {
@@ -77,13 +75,6 @@ if (!crucialEnvVarsMissing) {
         console.error("Firebase getAuth() error:", error);
         crucialEnvVarsMissing = true; 
     }
-    try {
-      dbInstance = getFirestore(app); 
-      console.log("Firebase Firestore instance retrieved/initialized successfully.");
-    } catch (error) {
-        console.error("Firebase getFirestore() error:", error);
-        crucialEnvVarsMissing = true; 
-    }
   } else if (!crucialEnvVarsMissing) { 
     // This case should ideally not be reached if crucialEnvVarsMissing was false
     console.error("Firebase app instance is undefined after initialization/retrieval attempt, despite no crucial vars reported missing initially. This is unexpected and likely points to an issue with the firebaseConfig object passed to initializeApp, even if individual variables seemed present.");
@@ -92,14 +83,13 @@ if (!crucialEnvVarsMissing) {
 }
 
 if (crucialEnvVarsMissing) {
-  const errorMessage = "CRITICAL Firebase Setup Issue: Firebase is not configured correctly, either due to missing/incorrect environment variables (check .env.local and ensure it's loaded by restarting server) or issues initializing Firebase services (see console for specifics). Authentication and Firestore features WILL NOT WORK. Exported 'auth' and 'db' instances will be undefined.";
+  const errorMessage = "CRITICAL Firebase Setup Issue: Firebase is not configured correctly, either due to missing/incorrect environment variables (check .env.local and ensure it's loaded by restarting server) or issues initializing Firebase services (see console for specifics). Authentication WILL NOT WORK. Exported 'auth' instance will be undefined.";
   console.error(errorMessage);
-  // Ensure authInstance and dbInstance are indeed undefined if setup failed
+  // Ensure authInstance is indeed undefined if setup failed
   authInstance = undefined;
-  dbInstance = undefined;
 } else {
-   console.log("Firebase config check complete. Auth and Firestore services should be available if enabled in your Firebase project console and security rules allow access.");
+   console.log("Firebase config check complete. Auth service should be available if enabled in your Firebase project console.");
 }
 
 
-export { app, authInstance as auth, dbInstance as db, GoogleAuthProvider };
+export { app, authInstance as auth, GoogleAuthProvider };

@@ -13,7 +13,6 @@ import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase/config';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { UserPlus } from 'lucide-react';
-import { createUserDocument } from '@/lib/firebase/firestoreService';
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState('');
@@ -45,7 +44,7 @@ export default function SignupPage() {
       const user = userCredential.user;
 
       await updateProfile(user, { displayName: fullName.trim() });
-      await createUserDocument(user, fullName.trim());
+      // No database call, just update auth profile
 
       toast({ title: 'Signup Successful', description: 'Your account has been created.' });
       router.push('/');

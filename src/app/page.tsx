@@ -7,11 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy, Settings, PlusCircle, MoreVertical, Edit3, Calendar as CalendarIcon, StickyNote } from 'lucide-react';
+import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Loader2, Edit3, Calendar as CalendarIcon } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
 import {
@@ -26,12 +26,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -40,145 +34,16 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { 
-  createOrganizationWithInviteCode, 
-  joinOrganizationWithInviteCode, 
-  getUserOrganizationDetails,
-  getUserAssociatedOrganizations,
-  updateUserActiveOrganization,
-  deleteOrganization as deleteOrgService,
-  getOrganizationMembers
-} from '@/lib/firebase/firestoreService';
-import type { Organization } from '@/interfaces/Organization';
-import type { UserProfile } from '@/interfaces/User';
-
 
 const ALL_VOLUNTEERS_OPTION = "__ALL_VOLUNTEERS__";
 
-type ComponentState = 'loading' | 'orgSelection' | 'memberView';
-type OrgSelectionSubView = 'list' | 'createForm' | 'joinForm';
-
-function CreateOrganizationForm({
-  onOrganizationCreated,
-  onBack,
-  userId
-}: {
-  onOrganizationCreated: (org: Organization, inviteCode: string) => void;
-  onBack: () => void;
-  userId: string;
-}) {
-  const [orgName, setOrgName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const { toast } = useToast();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!orgName.trim()) {
-      toast({ title: 'Error', description: 'Organization name cannot be empty.', variant: 'destructive' });
-      return;
-    }
-    setIsCreating(true);
-    try {
-      const newOrg = await createOrganizationWithInviteCode(userId, orgName.trim());
-      toast({ title: 'Success', description: `Organization "${newOrg.name}" created.` });
-      onOrganizationCreated(newOrg, newOrg.inviteCode);
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.message || 'Failed to create organization.', variant: 'destructive' });
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="orgName">Organization Name</Label>
-        <Input
-          id="orgName"
-          value={orgName}
-          onChange={(e) => setOrgName(e.target.value)}
-          placeholder="Your Organization Name"
-          className="mt-1"
-          disabled={isCreating}
-        />
-      </div>
-      <div className="flex flex-col space-y-2">
-        <Button type="submit" className="w-full" disabled={isCreating}>
-          {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {isCreating ? 'Creating...' : 'Create Organization'}
-        </Button>
-        <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isCreating}>
-          Back to Organization List
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function JoinOrganizationForm({
-  onOrganizationJoined,
-  onBack,
-  userId
-}: {
-  onOrganizationJoined: (org: Organization) => void;
-  onBack: () => void;
-  userId: string;
-}) {
-  const [inviteCode, setInviteCode] = useState('');
-  const [isJoining, setIsJoining] = useState(false);
-  const { toast } = useToast();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteCode.trim()) {
-      toast({ title: 'Error', description: 'Invite code cannot be empty.', variant: 'destructive' });
-      return;
-    }
-    setIsJoining(true);
-    try {
-      const joinedOrg = await joinOrganizationWithInviteCode(userId, inviteCode.trim());
-      if (joinedOrg) {
-        toast({ title: 'Success', description: `Successfully joined "${joinedOrg.name}".` });
-        onOrganizationJoined(joinedOrg);
-      } else {
-        toast({ title: 'Error', description: 'Invalid invite code or organization not found.', variant: 'destructive' });
-      }
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.message || 'Failed to join organization.', variant: 'destructive' });
-    } finally {
-      setIsJoining(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="inviteCode">Invite Code</Label>
-        <Input
-          id="inviteCode"
-          value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value)}
-          placeholder="Enter invite code"
-          className="mt-1"
-          disabled={isJoining}
-        />
-      </div>
-      <div className="flex flex-col space-y-2">
-        <Button type="submit" className="w-full" disabled={isJoining}>
-          {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {isJoining ? 'Joining...' : 'Join Organization'}
-        </Button>
-        <Button type="button" variant="link" onClick={onBack} className="w-full" disabled={isJoining}>
-          Back to Organization List
-        </Button>
-      </div>
-    </form>
-  );
-}
-
+const MOCK_MEMBERS = [
+    { uid: 'mockuser1', displayName: 'Volunteer One', email: 'one@test.com' },
+    { uid: 'mockuser2', displayName: 'Volunteer Two', email: 'two@test.com' },
+    { uid: 'mockuser3', displayName: 'Volunteer Three', email: 'three@test.com' },
+];
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -191,19 +56,10 @@ export default function Home() {
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [selectedExportOption, setSelectedExportOption] = useState<string>(ALL_VOLUNTEERS_OPTION);
   
-  const [componentState, setComponentState] = useState<ComponentState>('loading');
-  const [orgSelectionSubView, setOrgSelectionSubView] = useState<OrgSelectionSubView>('list');
-  const [userAssociatedOrgs, setUserAssociatedOrgs] = useState<Organization[]>([]);
-  const [isLoadingUserAssociatedOrgs, setIsLoadingUserAssociatedOrgs] = useState<boolean>(true);
+  // Hardcoded values for local testing without a database
+  const organizationName = "KSHT";
+  const userRole = 'owner'; // Assume 'owner' role to show all features
 
-  const [organizationDetails, setOrganizationDetails] = useState<Organization | null>(null);
-  const [userRole, setUserRole] = useState<UserProfile['role']>(null);
-  const [showInviteCodeCreatedCard, setShowInviteCodeCreatedCard] = useState(false);
-
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [orgToDelete, setOrgToDelete] = useState<Organization | null>(null);
-
-  const [organizationMembers, setOrganizationMembers] = useState<UserProfile[]>([]);
   const [manualSelectedVolunteerId, setManualSelectedVolunteerId] = useState<string>('');
   const [manualDate, setManualDate] = useState<Date | undefined>(new Date());
   const [manualClockInTime, setManualClockInTime] = useState<string>(''); // HH:mm
@@ -213,106 +69,43 @@ export default function Home() {
 
   const [displayDate, setDisplayDate] = useState<Date>(new Date());
 
-
-  const fetchAndSetUserAssociatedOrgs = async (userId: string) => {
-    setIsLoadingUserAssociatedOrgs(true);
-    try {
-      const orgs = await getUserAssociatedOrganizations(userId);
-      setUserAssociatedOrgs(orgs);
-    } catch (error) {
-      console.error("Error fetching user's associated organizations:", error);
-      toast({ title: 'Error', description: 'Could not fetch your organizations.', variant: 'destructive' });
-      setUserAssociatedOrgs([]);
-    } finally {
-      setIsLoadingUserAssociatedOrgs(false);
-    }
-  };
-  
+  // Effect for handling auth state
   useEffect(() => {
-    if (authLoading) {
-      setComponentState('loading');
-      return;
-    }
+    if (authLoading) return;
     if (!user) {
       router.push('/login');
       return;
     }
+    setCurrentUserName(user.displayName || user.email?.split('@')[0] || 'User');
+  }, [user, authLoading, router]);
 
-    setComponentState('loading');
-    setTimeLogs([]); 
-    setDisplayDate(new Date());
-    
-    getUserOrganizationDetails(user.uid)
-      .then(orgAndUserData => {
-        if (orgAndUserData?.organization) {
-          setOrganizationDetails(orgAndUserData.organization);
-          setUserRole(orgAndUserData.userRole);
-          setCurrentUserName(orgAndUserData.userDisplayName || user.email?.split('@')[0] || 'User');
-          setComponentState('memberView');
-        } else {
-          setCurrentUserName(orgAndUserData?.userDisplayName || user.displayName || user.email?.split('@')[0] || 'User');
-          setComponentState('orgSelection');
-          setOrgSelectionSubView('list');
-          fetchAndSetUserAssociatedOrgs(user.uid);
-          setOrganizationDetails(null);
-          setUserRole(null);
-        }
-      })
-      .catch(error => {
-        console.error("Error fetching initial organization or user details:", error);
-        toast({ title: 'Error', description: 'Could not fetch your details. Please try refreshing.', variant: 'destructive'});
-        setCurrentUserName(user.displayName || user.email?.split('@')[0] || 'User');
-        setComponentState('orgSelection');
-        setOrgSelectionSubView('list');
-        fetchAndSetUserAssociatedOrgs(user.uid);
-        setOrganizationDetails(null);
-        setUserRole(null);
-      });
-
-  }, [user, authLoading, router, toast]);
-
+  // Effect for loading logs from localStorage on mount
   useEffect(() => {
-    if (user && componentState === 'memberView' && organizationDetails?.id) {
-      const storageKey = `timeLogs_${organizationDetails.id}`;
-      const storedLogs = localStorage.getItem(storageKey);
-      if (storedLogs) {
-        try {
-          const parsedLogs = JSON.parse(storedLogs, (key, value) => {
-            if (key === 'clockIn' || key === 'clockOut') {
-              return value ? new Date(value) : null;
-            }
-            return value;
-          }) as TimeLogEntry[];
-          setTimeLogs(parsedLogs);
-        } catch (error) {
-          console.error(`Failed to parse logs from localStorage (key: ${storageKey})`, error);
-          localStorage.removeItem(storageKey);
-          setTimeLogs([]);
-        }
-      } else {
-        setTimeLogs([]);
+    const storageKey = 'timeLogs_ksht';
+    const storedLogs = localStorage.getItem(storageKey);
+    if (storedLogs) {
+      try {
+        const parsedLogs = JSON.parse(storedLogs, (key, value) => {
+          if (key === 'clockIn' || key === 'clockOut') {
+            return value ? new Date(value) : null;
+          }
+          return value;
+        }) as TimeLogEntry[];
+        setTimeLogs(parsedLogs);
+      } catch (error) {
+        console.error(`Failed to parse logs from localStorage (key: ${storageKey})`, error);
+        localStorage.removeItem(storageKey);
       }
-      
-      let previousOrgId: string | null = null;
-      if (organizationDetails?.id !== previousOrgId) {
-         setDisplayDate(new Date());
-         previousOrgId = organizationDetails.id;
-      }
-
-    } else if (componentState !== 'memberView' || !organizationDetails?.id) {
-        setTimeLogs([]); 
-        setDisplayDate(new Date());
     }
-  }, [user, componentState, organizationDetails?.id]);
+  }, []);
 
-
+  // Effect for saving logs to localStorage
   useEffect(() => {
-    if (componentState === 'memberView' && organizationDetails?.id && timeLogs) {
-      const storageKey = `timeLogs_${organizationDetails.id}`;
-      localStorage.setItem(storageKey, JSON.stringify(timeLogs));
-    }
-  }, [timeLogs, componentState, organizationDetails?.id]);
+    const storageKey = 'timeLogs_ksht';
+    localStorage.setItem(storageKey, JSON.stringify(timeLogs));
+  }, [timeLogs]);
 
+  // Effect for updating current date/time display
   useEffect(() => {
     const updateDateTime = () => {
       setCurrentDateTime(format(new Date(), 'MM/dd/yyyy - hh:mm:ss a'));
@@ -322,34 +115,22 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
+  // Effect to pre-select a volunteer for the manual entry form
   useEffect(() => {
-    if (componentState === 'memberView' && userRole === 'owner' && organizationDetails?.id) {
-      getOrganizationMembers(organizationDetails.id)
-        .then(members => {
-          setOrganizationMembers(members);
-          if (members.length > 0 && (!manualSelectedVolunteerId || !members.find(m => m.uid === manualSelectedVolunteerId))) {
-            setManualSelectedVolunteerId(members[0].uid); 
-          }
-        })
-        .catch(error => {
-          console.error("Error fetching organization members:", error);
-          toast({ title: "Error", description: "Could not fetch organization members.", variant: "destructive"});
-          setOrganizationMembers([]);
-        });
-    } else {
-      setOrganizationMembers([]); 
-    }
-  }, [componentState, userRole, organizationDetails?.id, toast, manualSelectedVolunteerId]);
+      if (MOCK_MEMBERS.length > 0) {
+          setManualSelectedVolunteerId(MOCK_MEMBERS[0].uid);
+      }
+  }, []);
 
 
   const isCurrentUserClockedIn = useMemo(() => {
-    if (!currentUserName || componentState !== 'memberView') return false;
+    if (!currentUserName) return false;
     const todayDateStr = format(new Date(), 'yyyy-MM-dd'); 
     return timeLogs.some(log => log.name === currentUserName && log.clockOut === null && log.date === todayDateStr);
-  }, [currentUserName, timeLogs, componentState]);
+  }, [currentUserName, timeLogs]);
 
   const handleClockIn = () => {
-    if (!currentUserName.trim() || !organizationDetails?.id) return;
+    if (!currentUserName.trim()) return;
     if (isCurrentUserClockedIn) {
       toast({ title: 'Error', description: `${currentUserName} is already clocked in.`, variant: 'destructive' });
       return;
@@ -365,7 +146,7 @@ export default function Home() {
   };
 
   const handleClockOut = () => {
-    if (!currentUserName.trim() || !organizationDetails?.id) return;
+    if (!currentUserName.trim()) return;
     if (!isCurrentUserClockedIn) {
       toast({ title: 'Error', description: `${currentUserName} is not clocked in.`, variant: 'destructive' });
       return;
@@ -386,19 +167,16 @@ export default function Home() {
   };
   
   const displayedDateLogs = useMemo(() => {
-    if (componentState !== 'memberView' || !organizationDetails?.id) return [];
     const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
     let logsToDisplay = timeLogs.filter(log => log.date === selectedDateStr);
     if (userRole === 'member' && currentUserName) {
       logsToDisplay = logsToDisplay.filter(log => log.name === currentUserName);
     }
     return logsToDisplay.sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
-  }, [timeLogs, componentState, organizationDetails?.id, userRole, currentUserName, displayDate]);
+  }, [timeLogs, userRole, currentUserName, displayDate]);
 
   const uniqueVolunteerNamesForExport = useMemo(() => {
-    if (!organizationDetails?.id) return [];
     const logsForSelectedDate = timeLogs.filter(log => log.date === format(displayDate, 'yyyy-MM-dd'));
-
     if (userRole === 'owner') {
       const names = new Set(logsForSelectedDate.map(log => log.name));
       return Array.from(names).sort((a, b) => a.localeCompare(b));
@@ -407,7 +185,7 @@ export default function Home() {
       return [currentUserName];
     }
     return [];
-  }, [timeLogs, userRole, currentUserName, organizationDetails?.id, displayDate]);
+  }, [timeLogs, userRole, currentUserName, displayDate]);
 
   const formatDurationForExport = (startTime: Date, endTime: Date | null): string => {
     if (!endTime) return 'In Progress';
@@ -420,21 +198,20 @@ export default function Home() {
   };
 
   const handleExport = () => {
-    if (!organizationDetails?.id) return;
     let logsToExport: TimeLogEntry[];
     let fileNamePart: string;
     const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
-    const logsForSelectedDateInCurrentOrg = timeLogs.filter(log => log.date === selectedDateStr);
+    const logsForSelectedDate = timeLogs.filter(log => log.date === selectedDateStr);
 
     if (userRole === 'member' && currentUserName) {
-        logsToExport = logsForSelectedDateInCurrentOrg.filter(log => log.name === currentUserName);
+        logsToExport = logsForSelectedDate.filter(log => log.name === currentUserName);
         fileNamePart = currentUserName.replace(/\s+/g, '_');
     } else if (userRole === 'owner') {
         if (selectedExportOption === ALL_VOLUNTEERS_OPTION) {
-            logsToExport = [...logsForSelectedDateInCurrentOrg].sort((a, b) => a.name.localeCompare(b.name));
+            logsToExport = [...logsForSelectedDate].sort((a, b) => a.name.localeCompare(b.name));
             fileNamePart = "All_Volunteers";
         } else {
-            logsToExport = logsForSelectedDateInCurrentOrg.filter(log => log.name === selectedExportOption);
+            logsToExport = logsForSelectedDate.filter(log => log.name === selectedExportOption);
             fileNamePart = selectedExportOption.replace(/\s+/g, '_');
         }
     } else {
@@ -442,7 +219,7 @@ export default function Home() {
         return;
     }
     if (logsToExport.length === 0) {
-        const forWhom = userRole === 'member' ? currentUserName : (selectedExportOption === ALL_VOLUNTEERS_OPTION ? `entries for ${organizationDetails.name} on ${selectedDateStr}` : selectedExportOption);
+        const forWhom = userRole === 'member' ? currentUserName : (selectedExportOption === ALL_VOLUNTEERS_OPTION ? `entries for ${organizationName} on ${selectedDateStr}` : selectedExportOption);
         toast({ title: "No Data", description: `There are no volunteer entries for ${forWhom} to export for ${selectedDateStr}.`, variant: "destructive" });
         return;
     }
@@ -458,12 +235,11 @@ export default function Home() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Volunteer Logs');
     
-    XLSX.writeFile(workbook, `VolunteerLogs_${fileNamePart}_${organizationDetails?.name.replace(/\s+/g, '_') || 'Org'}_${selectedDateStr}.xlsx`);
+    XLSX.writeFile(workbook, `VolunteerLogs_${fileNamePart}_${organizationName.replace(/\s+/g, '_')}_${selectedDateStr}.xlsx`);
     toast({ title: "Export Successful", description: `Volunteer entries for ${fileNamePart} on ${selectedDateStr} exported.` });
   };
 
   const confirmClearEntries = () => {
-    if (!organizationDetails?.id) return;
     let clearedCount = 0;
     const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
     if (userRole === 'member' && currentUserName) {
@@ -471,81 +247,21 @@ export default function Home() {
       clearedCount = userLogsForSelectedDate.length;
       setTimeLogs(prevLogs => prevLogs.filter(log => !(log.name === currentUserName && log.date === selectedDateStr)));
       if (clearedCount > 0) {
-        toast({ title: "Entries Cleared", description: `Your ${clearedCount} volunteer entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationDetails.name} have been cleared.` });
+        toast({ title: "Entries Cleared", description: `Your ${clearedCount} volunteer entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationName} have been cleared.` });
       } else {
-        toast({ title: "No Entries", description: `You had no volunteer entries for ${selectedDateStr} in ${organizationDetails.name} to clear.` });
+        toast({ title: "No Entries", description: `You had no volunteer entries for ${selectedDateStr} in ${organizationName} to clear.` });
       }
     } else if (userRole === 'owner') {
       const logsForSelectedDateInOrg = timeLogs.filter(log => log.date === selectedDateStr);
       clearedCount = logsForSelectedDateInOrg.length;
       setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== selectedDateStr)); 
       if (clearedCount > 0) {
-        toast({ title: "All Entries Cleared", description: `All ${clearedCount} volunteer entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationDetails.name} have been cleared.` });
+        toast({ title: "All Entries Cleared", description: `All ${clearedCount} volunteer entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationName} have been cleared.` });
       } else {
-        toast({ title: "No Entries", description: `There were no volunteer entries for ${selectedDateStr} in ${organizationDetails.name} to clear.` });
+        toast({ title: "No Entries", description: `There were no volunteer entries for ${selectedDateStr} in ${organizationName} to clear.` });
       }
-    } else {
-      toast({ title: "Error", description: "Cannot determine clear scope.", variant: "destructive" });
     }
     setIsClearConfirmOpen(false);
-  };
-
-  const handleCopyInviteCode = () => {
-    if (organizationDetails?.inviteCode) {
-      navigator.clipboard.writeText(organizationDetails.inviteCode)
-        .then(() => toast({ title: "Copied!", description: "Invite code copied to clipboard." }))
-        .catch(() => toast({ title: "Error", description: "Could not copy invite code.", variant: "destructive" }));
-    }
-  };
-
-  const handleSelectOrganization = async (org: Organization) => {
-    if (!user) return;
-    setOrganizationDetails(org);
-    const role = org.ownerUid === user.uid ? 'owner' : 'member';
-    setUserRole(role);
-    await updateUserActiveOrganization(user.uid, org.id, role);
-    setComponentState('memberView');
-    setShowInviteCodeCreatedCard(false);
-    setTimeLogs([]); 
-    setDisplayDate(new Date());
-  };
-
-  const handleReturnToOrgSelectionList = () => {
-    if (!user) return;
-    setComponentState('orgSelection');
-    setOrgSelectionSubView('list');
-    fetchAndSetUserAssociatedOrgs(user.uid); 
-    setOrganizationDetails(null);
-    setUserRole(null);
-    setShowInviteCodeCreatedCard(false);
-    setTimeLogs([]);
-    setDisplayDate(new Date());
-  };
-
-  const handleDeleteOrgClicked = (org: Organization) => {
-    setOrgToDelete(org);
-    setIsDeleteDialogOpen(true);
-  };
-
-  const confirmDeleteOrganization = async () => {
-    if (!orgToDelete || !user) return;
-    try {
-      await deleteOrgService(orgToDelete.id);
-      toast({ title: 'Organization Deleted', description: `"${orgToDelete.name}" has been deleted.` });
-      setOrgToDelete(null);
-      setIsDeleteDialogOpen(false);
-      fetchAndSetUserAssociatedOrgs(user.uid); 
-      if (organizationDetails?.id === orgToDelete.id) {
-        setOrganizationDetails(null);
-        setUserRole(null);
-        setComponentState('orgSelection'); 
-        setOrgSelectionSubView('list');
-        setTimeLogs([]);
-        setDisplayDate(new Date());
-      }
-    } catch (error: any) {
-      toast({ title: 'Error Deleting Organization', description: error.message || 'Could not delete organization.', variant: 'destructive' });
-    }
   };
 
   const handleAddManualTimeEntry = async (e: React.FormEvent) => {
@@ -558,7 +274,7 @@ export default function Home() {
       return;
     }
 
-    const selectedVolunteer = organizationMembers.find(mem => mem.uid === manualSelectedVolunteerId);
+    const selectedVolunteer = MOCK_MEMBERS.find(mem => mem.uid === manualSelectedVolunteerId);
     if (!selectedVolunteer) {
       toast({ title: "Error", description: "Selected volunteer not found.", variant: "destructive" });
       setIsAddingManualEntry(false);
@@ -630,8 +346,7 @@ export default function Home() {
     return true;
   }, [userRole, displayedDateLogs, currentUserName]);
 
-
-  if (componentState === 'loading' || authLoading) {
+  if (authLoading) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-secondary/10">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -639,8 +354,10 @@ export default function Home() {
     );
   }
 
-  if (!user) { return <main className="min-h-screen flex items-center justify-center"><p>Redirecting to login...</p></main>; }
-
+  if (!user) {
+    return <main className="min-h-screen flex items-center justify-center"><p>Redirecting to login...</p></main>;
+  }
+  
   const commonHeader = (
     <div className="text-center space-y-4 w-full max-w-2xl mb-8">
       <div className="flex justify-between items-center w-full">
@@ -651,166 +368,23 @@ export default function Home() {
           height={80} 
           className="rounded-full shadow-lg" 
           data-ai-hint="temple logo"
-          priority={componentState !== 'memberView'}
+          priority
         />
         <Button onClick={logout} variant="outline" size="sm"><LogOut className="mr-2 h-4 w-4" /> Logout</Button>
       </div>
       <h1 className="text-4xl sm:text-5xl font-bold">
         <span className="bg-gradient-to-r from-primary to-accent text-transparent bg-clip-text">KSHT Volunteer Log</span>
       </h1>
-      {componentState === 'memberView' && organizationDetails && (
         <>
-          <p className="text-lg sm:text-xl text-muted-foreground">Organization: {organizationDetails.name} ({currentUserName || 'User'} - {userRole === 'owner' ? 'Owner' : userRole === 'member' ? 'Member' : 'Role not set'})</p>
+          <p className="text-lg sm:text-xl text-muted-foreground">Organization: {organizationName} ({currentUserName || 'User'} - {userRole === 'owner' ? 'Owner' : 'Member'})</p>
           {currentDateTime && ( <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-lg shadow-md bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold text-md sm:text-lg"><CalendarDays className="mr-2 h-5 w-5 sm:h-6 sm:w-6" /><span>{currentDateTime}</span></div> )}
         </>
-      )}
-       {componentState === 'orgSelection' && (
-         <p className="text-lg sm:text-xl text-muted-foreground">Welcome, {currentUserName || 'User'}!</p>
-       )}
     </div>
   );
 
-  if (componentState === 'orgSelection') {
-    return (
-      <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
-        {commonHeader}
-        {orgSelectionSubView === 'list' && (
-          <Card className="w-full max-w-lg shadow-xl rounded-xl">
-            <CardHeader>
-              <CardTitle className="text-xl sm:text-2xl font-semibold">Your Organizations</CardTitle>
-              <CardDescription>Select an organization to continue, or create/join a new one.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isLoadingUserAssociatedOrgs ? (
-                <div className="flex justify-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-              ) : userAssociatedOrgs.length > 0 ? (
-                <div className="space-y-3 max-h-96 overflow-y-auto p-1">
-                  {userAssociatedOrgs.map(org => (
-                    <div key={org.id} className="flex items-center gap-2">
-                      <Button variant="outline" className="flex-1 justify-start p-4 h-auto text-left" onClick={() => handleSelectOrganization(org)}>
-                        <Building className="mr-3 h-5 w-5 text-primary/80" />
-                        <div className="flex flex-col">
-                          <span className="font-semibold">{org.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            Role: {org.ownerUid === user.uid ? 'Owner' : 'Member'} | ID: {org.id.substring(0,6)}...
-                          </span>
-                        </div>
-                      </Button>
-                      {org.ownerUid === user.uid && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-9 w-9">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteOrgClicked(org)}
-                              className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete Organization
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-muted-foreground py-4">You are not associated with any organizations yet.</p>
-              )}
-              <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                <Button onClick={() => setOrgSelectionSubView('createForm')} className="flex-1" size="lg">
-                  <PlusCircle className="mr-2 h-5 w-5" /> Create New Organization
-                </Button>
-                <Button onClick={() => setOrgSelectionSubView('joinForm')} variant="outline" className="flex-1" size="lg">
-                  <Users className="mr-2 h-5 w-5" /> Join with Code
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        {orgSelectionSubView === 'createForm' && (
-          <Card className="w-full max-w-md shadow-xl rounded-xl">
-            <CardHeader><CardTitle>Create New Organization</CardTitle></CardHeader>
-            <CardContent>
-              <CreateOrganizationForm
-                userId={user.uid}
-                onOrganizationCreated={(org) => { 
-                  setOrganizationDetails(org);
-                  setUserRole('owner');
-                  setComponentState('memberView');
-                  setShowInviteCodeCreatedCard(true);
-                  updateUserActiveOrganization(user.uid, org.id, 'owner');
-                  fetchAndSetUserAssociatedOrgs(user.uid); 
-                }}
-                onBack={() => setOrgSelectionSubView('list')}
-              />
-            </CardContent>
-          </Card>
-        )}
-        {orgSelectionSubView === 'joinForm' && (
-           <Card className="w-full max-w-md shadow-xl rounded-xl">
-             <CardHeader><CardTitle>Join Organization</CardTitle></CardHeader>
-             <CardContent>
-              <JoinOrganizationForm
-                userId={user.uid}
-                onOrganizationJoined={(org) => {
-                  setOrganizationDetails(org);
-                  setUserRole('member');
-                  setComponentState('memberView');
-                  setShowInviteCodeCreatedCard(false);
-                  updateUserActiveOrganization(user.uid, org.id, 'member');
-                  fetchAndSetUserAssociatedOrgs(user.uid); 
-                }}
-                onBack={() => setOrgSelectionSubView('list')}
-              />
-            </CardContent>
-          </Card>
-        )}
-        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Are you sure you want to delete "{orgToDelete?.name}"?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the organization and all associated data that is directly stored within the organization document. Member volunteer logs stored locally will remain unless their active organization changes.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setIsDeleteDialogOpen(false); setOrgToDelete(null); }}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteOrganization} className="bg-red-600 hover:bg-red-700">
-                Yes, Delete Organization
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </main>
-    );
-  }
-  
   return (
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
       {commonHeader}
-
-      {userRole === 'owner' && organizationDetails?.inviteCode && (
-        <Card className="w-full max-w-md shadow-xl rounded-xl bg-green-50 border-green-200 dark:bg-green-900/30 dark:border-green-700">
-          <CardHeader>
-            <CardTitle className="text-lg sm:text-xl font-semibold text-green-700 dark:text-green-300 flex items-center gap-2">
-              <Info className="h-5 w-5" />
-              {showInviteCodeCreatedCard ? "Organization Created!" : "Your Organization's Invite Code"}
-            </CardTitle>
-            <CardDescription className="text-green-600 dark:text-green-400">Share this invite code with your team members to join "{organizationDetails.name}".</CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <div className="p-3 bg-green-100 dark:bg-green-800/50 rounded-md inline-flex items-center gap-2">
-              <Label htmlFor="inviteCodeDisplay" className="sr-only">Invite Code</Label>
-              <Input id="inviteCodeDisplay" type="text" value={organizationDetails.inviteCode} readOnly className="text-2xl font-mono tracking-wider text-green-800 dark:text-green-200 bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 h-auto p-0"/>
-              <Button variant="ghost" size="sm" onClick={handleCopyInviteCode} aria-label="Copy invite code"><Copy className="h-5 w-5 text-green-600 dark:text-green-400" /></Button>
-            </div>
-          </CardContent>
-          {showInviteCodeCreatedCard && ( <CardFooter><Button variant="outline" size="sm" className="w-full" onClick={() => setShowInviteCodeCreatedCard(false)}>Dismiss</Button></CardFooter> )}
-        </Card>
-      )}
 
       <Card className="w-full max-w-md shadow-xl rounded-xl">
         <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-xl sm:text-2xl font-semibold"><User className="mr-2 h-6 w-6 text-primary" />Volunteer Logging</CardTitle></CardHeader>
@@ -827,13 +401,13 @@ export default function Home() {
         </CardContent>
       </Card>
 
-      {userRole === 'owner' && organizationDetails && (
+      {userRole === 'owner' && (
         <Card className="w-full max-w-2xl shadow-xl rounded-xl">
           <CardHeader>
             <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
               <Edit3 className="h-6 w-6 text-primary" /> Manual Volunteer Log Adjustment
             </CardTitle>
-            <CardDescription>Manually add or adjust volunteer entries for members in "{organizationDetails.name}".</CardDescription>
+            <CardDescription>Manually add or adjust volunteer entries for members in "{organizationName}".</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleAddManualTimeEntry} className="space-y-6">
@@ -843,13 +417,13 @@ export default function Home() {
                   <Select 
                     value={manualSelectedVolunteerId} 
                     onValueChange={setManualSelectedVolunteerId}
-                    disabled={organizationMembers.length === 0 || isAddingManualEntry}
+                    disabled={MOCK_MEMBERS.length === 0 || isAddingManualEntry}
                   >
                     <SelectTrigger id="manualVolunteerSelect">
                       <SelectValue placeholder="Select volunteer" />
                     </SelectTrigger>
                     <SelectContent>
-                      {organizationMembers.length > 0 ? organizationMembers.map(member => (
+                      {MOCK_MEMBERS.length > 0 ? MOCK_MEMBERS.map(member => (
                         <SelectItem key={member.uid} value={member.uid}>
                           {member.displayName} ({member.email})
                         </SelectItem>
@@ -962,7 +536,7 @@ export default function Home() {
         <CardContent className="space-y-4">
           {userRole === 'owner' && (
             <div className="space-y-2">
-              <Label htmlFor="export-select">Select Volunteer to Export ({organizationDetails?.name} - {format(displayDate, "PPP")})</Label>
+              <Label htmlFor="export-select">Select Volunteer to Export ({organizationName} - {format(displayDate, "PPP")})</Label>
               <Select value={selectedExportOption} onValueChange={setSelectedExportOption}>
                 <SelectTrigger id="export-select" className="w-full">
                   <SelectValue placeholder="Select an option" />
@@ -978,14 +552,14 @@ export default function Home() {
               </Select>
             </div>
           )}
-          {userRole === 'member' && ( <p className="text-sm text-muted-foreground">You can export your own volunteer entries for {organizationDetails?.name} on {format(displayDate, "PPP")}.</p> )}
+          {userRole === 'member' && ( <p className="text-sm text-muted-foreground">You can export your own volunteer entries for {organizationName} on {format(displayDate, "PPP")}.</p> )}
           <Button onClick={handleExport} variant="outline" className="w-full" disabled={exportDisabled}>
             <Download className="mr-2 h-5 w-5" /> Export to XLSX {userRole === 'member' ? `(My Entries)` : ''}
           </Button>
           <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" className="w-full" disabled={clearDisabled}>
-                <Trash2 className="mr-2 h-5 w-5" /> Clear {userRole === 'member' ? `My Entries for ${format(displayDate, "PPP")}` : `All Entries for ${format(displayDate, "PPP")}`} (Org: {organizationDetails?.name || 'Current'})
+                <Trash2 className="mr-2 h-5 w-5" /> Clear {userRole === 'member' ? `My Entries for ${format(displayDate, "PPP")}` : `All Entries for ${format(displayDate, "PPP")}`} (Org: {organizationName})
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -993,7 +567,7 @@ export default function Home() {
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This action cannot be undone. This will permanently delete 
-                  {userRole === 'member' ? ` your volunteer log entries for ${format(displayDate, "PPP")} in "${organizationDetails?.name}"` : ` all volunteer log entries for ${format(displayDate, "PPP")} in "${organizationDetails?.name}"`}
+                  {userRole === 'member' ? ` your volunteer log entries for ${format(displayDate, "PPP")} in "${organizationName}"` : ` all volunteer log entries for ${format(displayDate, "PPP")} in "${organizationName}"`}
                   from your browser&apos;s local storage.
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -1014,16 +588,6 @@ export default function Home() {
               <br />
               This feature requires additional server-side setup and database integration.
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="w-full max-w-2xl shadow-xl rounded-xl">
-        <CardHeader><CardTitle className="text-xl sm:text-2xl font-semibold flex items-center gap-2"><Settings className="h-6 w-6 text-primary" />Organization Settings</CardTitle></CardHeader>
-        <CardContent>
-          <Button onClick={handleReturnToOrgSelectionList} variant="outline" className="w-full">
-            <Users className="mr-2 h-5 w-5" /> Switch or Manage Organizations
-          </Button>
-          <p className="text-xs text-muted-foreground mt-2 text-center">This will take you back to the organization selection screen. Your current volunteer logs for "{organizationDetails?.name}" are saved locally.</p>
         </CardContent>
       </Card>
     </main>
