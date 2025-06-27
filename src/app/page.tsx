@@ -56,13 +56,20 @@ export default function Home() {
   const userRole = 'owner';
 
   const [manualSelectedVolunteerId, setManualSelectedVolunteerId] = useState<string>('');
-  const [manualDate, setManualDate] = useState<Date | undefined>(new Date());
+  const [manualDate, setManualDate] = useState<Date | undefined>();
   const [manualClockInTime, setManualClockInTime] = useState<string>(''); // HH:mm
   const [manualClockOutTime, setManualClockOutTime] = useState<string>(''); // HH:mm
   const [manualNote, setManualNote] = useState<string>('');
   const [isAddingManualEntry, setIsAddingManualEntry] = useState(false);
 
-  const [displayDate, setDisplayDate] = useState<Date>(new Date());
+  const [displayDate, setDisplayDate] = useState<Date | undefined>();
+
+  // Effect to set initial dates on client-side to avoid hydration mismatch
+  useEffect(() => {
+    const today = new Date();
+    setDisplayDate(today);
+    setManualDate(today);
+  }, []);
 
   // Effect for loading logs from localStorage on mount
   useEffect(() => {
@@ -152,6 +159,7 @@ export default function Home() {
   };
   
   const displayedDateLogs = useMemo(() => {
+    if (!displayDate) return [];
     const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
     let logsToDisplay = timeLogs.filter(log => log.date === selectedDateStr);
     // Since we hardcode 'owner' role, all logs for the date will be shown.
@@ -160,6 +168,7 @@ export default function Home() {
   }, [timeLogs, displayDate]);
 
   const uniqueVolunteerNamesForExport = useMemo(() => {
+    if (!displayDate) return [];
     const logsForSelectedDate = timeLogs.filter(log => log.date === format(displayDate, 'yyyy-MM-dd'));
     const names = new Set(logsForSelectedDate.map(log => log.name));
     return Array.from(names).sort((a, b) => a.localeCompare(b));
@@ -176,6 +185,7 @@ export default function Home() {
   };
 
   const handleExport = () => {
+    if (!displayDate) return;
     let logsToExport: TimeLogEntry[];
     let fileNamePart: string;
     const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
@@ -211,6 +221,7 @@ export default function Home() {
   };
 
   const confirmClearEntries = () => {
+    if (!displayDate) return;
     let clearedCount = 0;
     const selectedDateStr = format(displayDate, 'yyyy-MM-dd');
     
@@ -287,16 +298,18 @@ export default function Home() {
   };
 
   const exportDisabled = useMemo(() => {
+    if (!displayDate) return true;
     if (selectedExportOption === ALL_VOLUNTEERS_OPTION) {
       return displayedDateLogs.length === 0;
     } else {
       return displayedDateLogs.filter(log => log.name === selectedExportOption).length === 0;
     }
-  }, [displayedDateLogs, selectedExportOption]);
+  }, [displayedDateLogs, selectedExportOption, displayDate]);
 
   const clearDisabled = useMemo(() => {
+    if (!displayDate) return true;
     return displayedDateLogs.length === 0;
-  }, [displayedDateLogs]);
+  }, [displayedDateLogs, displayDate]);
 
   const commonHeader = (
     <div className="text-center space-y-4 w-full max-w-2xl mb-8">
@@ -320,6 +333,14 @@ export default function Home() {
         </>
     </div>
   );
+  
+  if (!displayDate) {
+    return (
+       <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center justify-center p-4 sm:p-8 space-y-8">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+       </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center p-4 sm:p-8 space-y-8 selection:bg-primary/20 selection:text-primary">
@@ -442,7 +463,7 @@ export default function Home() {
 
       <Card className="w-full max-w-2xl shadow-xl rounded-xl">
         <CardHeader className="flex flex-row items-center justify-between pb-4">
-          <CardTitle className="text-xl sm:text-2xl font-semibold">Volunteer Entries for {format(displayDate, "PPP")}</CardTitle>
+          <CardTitle className="text-xl sm:text-2xl font-semibold">Volunteer Entries for {displayDate ? format(displayDate, "PPP") : '...'}</CardTitle>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -470,11 +491,11 @@ export default function Home() {
       </Card>
 
       <Card className="w-full max-w-2xl shadow-xl rounded-xl">
-        <CardHeader><CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Data Management for {format(displayDate, "PPP")}</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-xl sm:text-2xl font-semibold">Export &amp; Data Management for {displayDate ? format(displayDate, "PPP") : '...'}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {userRole === 'owner' && (
             <div className="space-y-2">
-              <Label htmlFor="export-select">Select Volunteer to Export ({organizationName} - {format(displayDate, "PPP")})</Label>
+              <Label htmlFor="export-select">Select Volunteer to Export ({organizationName} - {displayDate ? format(displayDate, "PPP") : '...'})</Label>
               <Select value={selectedExportOption} onValueChange={setSelectedExportOption}>
                 <SelectTrigger id="export-select" className="w-full">
                   <SelectValue placeholder="Select an option" />
@@ -496,14 +517,14 @@ export default function Home() {
           <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" className="w-full" disabled={clearDisabled}>
-                <Trash2 className="mr-2 h-5 w-5" /> Clear All Entries for {format(displayDate, "PPP")}
+                <Trash2 className="mr-2 h-5 w-5" /> Clear All Entries for {displayDate ? format(displayDate, "PPP") : '...'}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete all volunteer log entries for {format(displayDate, "PPP")} in "{organizationName}" from your browser&apos;s local storage.
+                  This action cannot be undone. This will permanently delete all volunteer log entries for {displayDate ? format(displayDate, "PPP") : 'the selected date'} in "{organizationName}" from your browser&apos;s local storage.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

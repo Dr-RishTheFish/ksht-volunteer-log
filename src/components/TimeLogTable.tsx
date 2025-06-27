@@ -22,7 +22,7 @@ interface TimeLogTableProps {
   logs: TimeLogEntry[];
   currentUserName?: string; 
   userRole?: 'owner' | 'member' | null; 
-  displayDate: Date; 
+  displayDate: Date | undefined; 
 }
 
 function formatDuration(startTime: Date, endTime: Date | null): string {
@@ -50,7 +50,11 @@ export function TimeLogTable({ logs, userRole, currentUserName, displayDate }: T
   const entryCount = logs.length;
 
   useEffect(() => {
-    setFormattedDisplayDate(format(displayDate, 'M/d/yyyy'));
+    if (displayDate) {
+      setFormattedDisplayDate(format(displayDate, 'M/d/yyyy'));
+    } else {
+      setFormattedDisplayDate(null);
+    }
   }, [displayDate]);
 
   const captionText = userRole === 'member' ? 
