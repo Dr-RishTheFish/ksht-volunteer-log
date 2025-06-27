@@ -1,1 +1,11 @@
-// This file has been cleared as it is no longer needed for the database-free version.
+
+import type { Timestamp } from "firebase/firestore";
+
+export interface Organization {
+  id: string;
+  name: string;
+  ownerUid: string;
+  inviteCode: string;
+  memberUids: string[];
+  createdAt: Date | Timestamp;
+}

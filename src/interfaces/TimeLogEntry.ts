@@ -7,5 +7,3 @@ export interface TimeLogEntry {
   date: string; // Format: YYYY-MM-DD
   note?: string;
 }
-
-    
