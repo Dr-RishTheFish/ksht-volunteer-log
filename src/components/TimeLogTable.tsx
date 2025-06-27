@@ -55,8 +55,8 @@ export function TimeLogTable({ logs, userRole, currentUserName, displayDate }: T
   }, [displayDate]);
 
   const captionText = userRole === 'member' ? 
-    `A list of your time logs for ${formattedDisplayDate || 'the selected date'}.` :
-    `A list of time logs for ${formattedDisplayDate || 'the selected date'} for the organization.`;
+    `A list of your volunteer logs for ${formattedDisplayDate || 'the selected date'}.` :
+    `A list of volunteer logs for ${formattedDisplayDate || 'the selected date'} for the organization.`;
 
   return (
     <div className="w-full">
@@ -72,7 +72,7 @@ export function TimeLogTable({ logs, userRole, currentUserName, displayDate }: T
       )}
       {logs.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">
-          {userRole === 'member' ? `You have no time logs for ${formattedDisplayDate || 'this date'} yet.` : `No time logs for ${formattedDisplayDate || 'this date'} yet.`}
+          {userRole === 'member' ? `You have no volunteer logs for ${formattedDisplayDate || 'this date'} yet.` : `No volunteer logs for ${formattedDisplayDate || 'this date'} yet.`}
         </p>
       ) : (
         <ScrollArea className="h-[300px] rounded-md border">
@@ -81,7 +81,7 @@ export function TimeLogTable({ logs, userRole, currentUserName, displayDate }: T
               <TableCaption>{captionText}</TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
+                  <TableHead>Volunteer</TableHead>
                   <TableHead>Clock In</TableHead>
                   <TableHead>Clock Out</TableHead>
                   <TableHead>Duration</TableHead>
@@ -129,5 +129,3 @@ export function TimeLogTable({ logs, userRole, currentUserName, displayDate }: T
     </div>
   );
 }
-
-    

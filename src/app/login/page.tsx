@@ -99,12 +99,12 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center justify-center p-4 sm:p-8 selection:bg-primary/20 selection:text-primary">
       <div className="mb-8">
         <Image 
-          src="/Stickers.png" 
-          alt="Big Brainbox Logo" 
+          src="/logo.png" 
+          alt="KSHT Logo" 
           width={100} 
           height={100} 
           className="rounded-full shadow-lg"
-          data-ai-hint="logo sticker"
+          data-ai-hint="temple logo"
           priority
         />
       </div>
@@ -114,7 +114,7 @@ export default function LoginPage() {
             <LogIn className="h-7 w-7 text-primary" />
             Login to Your Account
           </CardTitle>
-          <CardDescription>Enter your credentials to access the time clock.</CardDescription>
+          <CardDescription>Enter your credentials to access the volunteer log.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-6">
@@ -196,5 +196,3 @@ export default function LoginPage() {
     </main>
   );
 }
-
-    

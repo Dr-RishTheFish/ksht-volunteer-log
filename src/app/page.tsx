@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import type { TimeLogEntry } from '@/interfaces/TimeLogEntry';
 import { useToast } from '@/hooks/use-toast';
-import { format, parse } from 'date-fns';
+import { format } from 'date-fns';
 import { User, CalendarDays, ArrowRightToLine, ArrowLeftToLine, Download, Trash2, LogOut, Building, Users, Loader2, Info, Copy, Settings, PlusCircle, MoreVertical, Edit3, Calendar as CalendarIcon, StickyNote } from 'lucide-react';
 import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
@@ -56,7 +56,7 @@ import type { Organization } from '@/interfaces/Organization';
 import type { UserProfile } from '@/interfaces/User';
 
 
-const ALL_EMPLOYEES_OPTION = "__ALL_EMPLOYEES__";
+const ALL_VOLUNTEERS_OPTION = "__ALL_VOLUNTEERS__";
 
 type ComponentState = 'loading' | 'orgSelection' | 'memberView';
 type OrgSelectionSubView = 'list' | 'createForm' | 'joinForm';
@@ -100,7 +100,7 @@ function CreateOrganizationForm({
           id="orgName"
           value={orgName}
           onChange={(e) => setOrgName(e.target.value)}
-          placeholder="Your Company Inc."
+          placeholder="Your Organization Name"
           className="mt-1"
           disabled={isCreating}
         />
@@ -189,7 +189,7 @@ export default function Home() {
   const [currentDateTime, setCurrentDateTime] = useState<string>('');
   const { toast } = useToast();
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
-  const [selectedExportOption, setSelectedExportOption] = useState<string>(ALL_EMPLOYEES_OPTION);
+  const [selectedExportOption, setSelectedExportOption] = useState<string>(ALL_VOLUNTEERS_OPTION);
   
   const [componentState, setComponentState] = useState<ComponentState>('loading');
   const [orgSelectionSubView, setOrgSelectionSubView] = useState<OrgSelectionSubView>('list');
@@ -204,7 +204,7 @@ export default function Home() {
   const [orgToDelete, setOrgToDelete] = useState<Organization | null>(null);
 
   const [organizationMembers, setOrganizationMembers] = useState<UserProfile[]>([]);
-  const [manualSelectedEmployeeId, setManualSelectedEmployeeId] = useState<string>('');
+  const [manualSelectedVolunteerId, setManualSelectedVolunteerId] = useState<string>('');
   const [manualDate, setManualDate] = useState<Date | undefined>(new Date());
   const [manualClockInTime, setManualClockInTime] = useState<string>(''); // HH:mm
   const [manualClockOutTime, setManualClockOutTime] = useState<string>(''); // HH:mm
@@ -293,7 +293,6 @@ export default function Home() {
         setTimeLogs([]);
       }
       
-      // Check if organization ID actually changed to avoid unnecessary date reset
       let previousOrgId: string | null = null;
       if (organizationDetails?.id !== previousOrgId) {
          setDisplayDate(new Date());
@@ -328,8 +327,8 @@ export default function Home() {
       getOrganizationMembers(organizationDetails.id)
         .then(members => {
           setOrganizationMembers(members);
-          if (members.length > 0 && (!manualSelectedEmployeeId || !members.find(m => m.uid === manualSelectedEmployeeId))) {
-            setManualSelectedEmployeeId(members[0].uid); 
+          if (members.length > 0 && (!manualSelectedVolunteerId || !members.find(m => m.uid === manualSelectedVolunteerId))) {
+            setManualSelectedVolunteerId(members[0].uid); 
           }
         })
         .catch(error => {
@@ -340,7 +339,7 @@ export default function Home() {
     } else {
       setOrganizationMembers([]); 
     }
-  }, [componentState, userRole, organizationDetails?.id, toast, manualSelectedEmployeeId]);
+  }, [componentState, userRole, organizationDetails?.id, toast, manualSelectedVolunteerId]);
 
 
   const isCurrentUserClockedIn = useMemo(() => {
@@ -396,7 +395,7 @@ export default function Home() {
     return logsToDisplay.sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime());
   }, [timeLogs, componentState, organizationDetails?.id, userRole, currentUserName, displayDate]);
 
-  const uniqueEmployeeNamesForExport = useMemo(() => {
+  const uniqueVolunteerNamesForExport = useMemo(() => {
     if (!organizationDetails?.id) return [];
     const logsForSelectedDate = timeLogs.filter(log => log.date === format(displayDate, 'yyyy-MM-dd'));
 
@@ -431,9 +430,9 @@ export default function Home() {
         logsToExport = logsForSelectedDateInCurrentOrg.filter(log => log.name === currentUserName);
         fileNamePart = currentUserName.replace(/\s+/g, '_');
     } else if (userRole === 'owner') {
-        if (selectedExportOption === ALL_EMPLOYEES_OPTION) {
+        if (selectedExportOption === ALL_VOLUNTEERS_OPTION) {
             logsToExport = [...logsForSelectedDateInCurrentOrg].sort((a, b) => a.name.localeCompare(b.name));
-            fileNamePart = "All_Employees";
+            fileNamePart = "All_Volunteers";
         } else {
             logsToExport = logsForSelectedDateInCurrentOrg.filter(log => log.name === selectedExportOption);
             fileNamePart = selectedExportOption.replace(/\s+/g, '_');
@@ -443,12 +442,12 @@ export default function Home() {
         return;
     }
     if (logsToExport.length === 0) {
-        const forWhom = userRole === 'member' ? currentUserName : (selectedExportOption === ALL_EMPLOYEES_OPTION ? `entries for ${organizationDetails.name} on ${selectedDateStr}` : selectedExportOption);
-        toast({ title: "No Data", description: `There are no time entries for ${forWhom} to export for ${selectedDateStr}.`, variant: "destructive" });
+        const forWhom = userRole === 'member' ? currentUserName : (selectedExportOption === ALL_VOLUNTEERS_OPTION ? `entries for ${organizationDetails.name} on ${selectedDateStr}` : selectedExportOption);
+        toast({ title: "No Data", description: `There are no volunteer entries for ${forWhom} to export for ${selectedDateStr}.`, variant: "destructive" });
         return;
     }
     const dataToExport = logsToExport.map(log => ({
-      'Employee Name': log.name,
+      'Volunteer Name': log.name,
       'Clock In': format(log.clockIn, 'yyyy-MM-dd HH:mm:ss'),
       'Clock Out': log.clockOut ? format(log.clockOut, 'yyyy-MM-dd HH:mm:ss') : '---',
       'Duration': formatDurationForExport(log.clockIn, log.clockOut),
@@ -457,10 +456,10 @@ export default function Home() {
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Time Logs');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Volunteer Logs');
     
-    XLSX.writeFile(workbook, `TimeLogs_${fileNamePart}_${organizationDetails?.name.replace(/\s+/g, '_') || 'Org'}_${selectedDateStr}.xlsx`);
-    toast({ title: "Export Successful", description: `Time entries for ${fileNamePart} on ${selectedDateStr} exported.` });
+    XLSX.writeFile(workbook, `VolunteerLogs_${fileNamePart}_${organizationDetails?.name.replace(/\s+/g, '_') || 'Org'}_${selectedDateStr}.xlsx`);
+    toast({ title: "Export Successful", description: `Volunteer entries for ${fileNamePart} on ${selectedDateStr} exported.` });
   };
 
   const confirmClearEntries = () => {
@@ -472,18 +471,18 @@ export default function Home() {
       clearedCount = userLogsForSelectedDate.length;
       setTimeLogs(prevLogs => prevLogs.filter(log => !(log.name === currentUserName && log.date === selectedDateStr)));
       if (clearedCount > 0) {
-        toast({ title: "Entries Cleared", description: `Your ${clearedCount} time entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationDetails.name} have been cleared.` });
+        toast({ title: "Entries Cleared", description: `Your ${clearedCount} volunteer entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationDetails.name} have been cleared.` });
       } else {
-        toast({ title: "No Entries", description: `You had no time entries for ${selectedDateStr} in ${organizationDetails.name} to clear.` });
+        toast({ title: "No Entries", description: `You had no volunteer entries for ${selectedDateStr} in ${organizationDetails.name} to clear.` });
       }
     } else if (userRole === 'owner') {
       const logsForSelectedDateInOrg = timeLogs.filter(log => log.date === selectedDateStr);
       clearedCount = logsForSelectedDateInOrg.length;
       setTimeLogs(prevLogs => prevLogs.filter(log => log.date !== selectedDateStr)); 
       if (clearedCount > 0) {
-        toast({ title: "All Entries Cleared", description: `All ${clearedCount} time entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationDetails.name} have been cleared.` });
+        toast({ title: "All Entries Cleared", description: `All ${clearedCount} volunteer entr${clearedCount === 1 ? 'y' : 'ies'} for ${selectedDateStr} in ${organizationDetails.name} have been cleared.` });
       } else {
-        toast({ title: "No Entries", description: `There were no time entries for ${selectedDateStr} in ${organizationDetails.name} to clear.` });
+        toast({ title: "No Entries", description: `There were no volunteer entries for ${selectedDateStr} in ${organizationDetails.name} to clear.` });
       }
     } else {
       toast({ title: "Error", description: "Cannot determine clear scope.", variant: "destructive" });
@@ -553,15 +552,15 @@ export default function Home() {
     e.preventDefault();
     setIsAddingManualEntry(true);
 
-    if (!manualSelectedEmployeeId || !manualDate || !manualClockInTime) {
-      toast({ title: "Missing Information", description: "Please select an employee, date, and clock-in time.", variant: "destructive" });
+    if (!manualSelectedVolunteerId || !manualDate || !manualClockInTime) {
+      toast({ title: "Missing Information", description: "Please select a volunteer, date, and clock-in time.", variant: "destructive" });
       setIsAddingManualEntry(false);
       return;
     }
 
-    const selectedEmployee = organizationMembers.find(mem => mem.uid === manualSelectedEmployeeId);
-    if (!selectedEmployee) {
-      toast({ title: "Error", description: "Selected employee not found.", variant: "destructive" });
+    const selectedVolunteer = organizationMembers.find(mem => mem.uid === manualSelectedVolunteerId);
+    if (!selectedVolunteer) {
+      toast({ title: "Error", description: "Selected volunteer not found.", variant: "destructive" });
       setIsAddingManualEntry(false);
       return;
     }
@@ -588,7 +587,7 @@ export default function Home() {
       
       const newLog: TimeLogEntry = {
         id: crypto.randomUUID(),
-        name: selectedEmployee.displayName,
+        name: selectedVolunteer.displayName,
         clockIn: clockInDateTime,
         clockOut: clockOutDateTime,
         date: dateStr,
@@ -596,14 +595,14 @@ export default function Home() {
       };
 
       setTimeLogs(prevLogs => [...prevLogs, newLog].sort((a,b) => b.clockIn.getTime() - a.clockIn.getTime()));
-      toast({ title: "Manual Entry Added", description: `Time log added for ${selectedEmployee.displayName} on ${dateStr}.` });
+      toast({ title: "Manual Entry Added", description: `Volunteer log added for ${selectedVolunteer.displayName} on ${dateStr}.` });
 
       setManualClockInTime('');
       setManualClockOutTime('');
       setManualNote('');
     } catch (error) {
-      console.error("Error processing manual time entry:", error);
-      toast({ title: "Error Adding Entry", description: "Could not add manual time entry.", variant: "destructive"});
+      console.error("Error processing manual volunteer entry:", error);
+      toast({ title: "Error Adding Entry", description: "Could not add manual volunteer entry.", variant: "destructive"});
     } finally {
       setIsAddingManualEntry(false);
     }
@@ -613,7 +612,7 @@ export default function Home() {
     if (userRole === 'member') {
       return displayedDateLogs.filter(log => log.name === currentUserName).length === 0;
     } else if (userRole === 'owner') {
-      if (selectedExportOption === ALL_EMPLOYEES_OPTION) {
+      if (selectedExportOption === ALL_VOLUNTEERS_OPTION) {
         return displayedDateLogs.length === 0;
       } else {
         return displayedDateLogs.filter(log => log.name === selectedExportOption).length === 0;
@@ -646,18 +645,18 @@ export default function Home() {
     <div className="text-center space-y-4 w-full max-w-2xl mb-8">
       <div className="flex justify-between items-center w-full">
         <Image 
-          src="/Stickers.png" 
-          alt="Big Brainbox Logo" 
+          src="/logo.png" 
+          alt="KSHT Logo" 
           width={80} 
           height={80} 
           className="rounded-full shadow-lg" 
-          data-ai-hint="logo sticker"
-          priority={componentState !== 'memberView'} // Only prioritize if not on main member view potentially
+          data-ai-hint="temple logo"
+          priority={componentState !== 'memberView'}
         />
         <Button onClick={logout} variant="outline" size="sm"><LogOut className="mr-2 h-4 w-4" /> Logout</Button>
       </div>
       <h1 className="text-4xl sm:text-5xl font-bold">
-        <span className="bg-gradient-to-r from-primary to-accent text-transparent bg-clip-text">Big Brainbox Time Clock</span>
+        <span className="bg-gradient-to-r from-primary to-accent text-transparent bg-clip-text">KSHT Volunteer Log</span>
       </h1>
       {componentState === 'memberView' && organizationDetails && (
         <>
@@ -774,7 +773,7 @@ export default function Home() {
             <AlertDialogHeader>
               <AlertDialogTitle>Are you sure you want to delete "{orgToDelete?.name}"?</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the organization and all associated data that is directly stored within the organization document. Member time logs stored locally will remain unless their active organization changes.
+                This action cannot be undone. This will permanently delete the organization and all associated data that is directly stored within the organization document. Member volunteer logs stored locally will remain unless their active organization changes.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -814,10 +813,10 @@ export default function Home() {
       )}
 
       <Card className="w-full max-w-md shadow-xl rounded-xl">
-        <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-xl sm:text-2xl font-semibold"><User className="mr-2 h-6 w-6 text-primary" />Time Tracking Controls</CardTitle></CardHeader>
+        <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-xl sm:text-2xl font-semibold"><User className="mr-2 h-6 w-6 text-primary" />Volunteer Logging</CardTitle></CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Your Name (for time entry)</Label>
+            <Label htmlFor="name" className="text-sm font-medium text-foreground/80">Your Name (for new entries)</Label>
             <Input id="name" type="text" placeholder="Your name for clock-in" value={currentUserName || ''} readOnly className="mt-1 text-base py-3 px-4 h-12 rounded-md focus:border-primary focus:ring-primary bg-muted/50 cursor-not-allowed"/>
             <p className="text-xs text-muted-foreground mt-1">Logged in as: {user?.email}</p>
           </div>
@@ -832,22 +831,22 @@ export default function Home() {
         <Card className="w-full max-w-2xl shadow-xl rounded-xl">
           <CardHeader>
             <CardTitle className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
-              <Edit3 className="h-6 w-6 text-primary" /> Manual Time Adjustment
+              <Edit3 className="h-6 w-6 text-primary" /> Manual Volunteer Log Adjustment
             </CardTitle>
-            <CardDescription>Manually add or adjust time entries for employees in "{organizationDetails.name}".</CardDescription>
+            <CardDescription>Manually add or adjust volunteer entries for members in "{organizationDetails.name}".</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleAddManualTimeEntry} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="manualEmployeeSelect">Employee</Label>
+                  <Label htmlFor="manualVolunteerSelect">Volunteer</Label>
                   <Select 
-                    value={manualSelectedEmployeeId} 
-                    onValueChange={setManualSelectedEmployeeId}
+                    value={manualSelectedVolunteerId} 
+                    onValueChange={setManualSelectedVolunteerId}
                     disabled={organizationMembers.length === 0 || isAddingManualEntry}
                   >
-                    <SelectTrigger id="manualEmployeeSelect">
-                      <SelectValue placeholder="Select employee" />
+                    <SelectTrigger id="manualVolunteerSelect">
+                      <SelectValue placeholder="Select volunteer" />
                     </SelectTrigger>
                     <SelectContent>
                       {organizationMembers.length > 0 ? organizationMembers.map(member => (
@@ -913,16 +912,16 @@ export default function Home() {
                 <Label htmlFor="manualNote">Note (Optional)</Label>
                 <Textarea
                   id="manualNote"
-                  placeholder="Reason for manual entry, project details, etc."
+                  placeholder="Reason for manual entry, task details, etc."
                   value={manualNote}
                   onChange={(e) => setManualNote(e.target.value)}
                   disabled={isAddingManualEntry}
                   rows={3}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={isAddingManualEntry || !manualSelectedEmployeeId || !manualDate || !manualClockInTime}>
+              <Button type="submit" className="w-full" disabled={isAddingManualEntry || !manualSelectedVolunteerId || !manualDate || !manualClockInTime}>
                 {isAddingManualEntry ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isAddingManualEntry ? 'Adding Entry...' : 'Add Manual Time Entry'}
+                {isAddingManualEntry ? 'Adding Entry...' : 'Add Manual Entry'}
               </Button>
             </form>
           </CardContent>
@@ -931,7 +930,7 @@ export default function Home() {
 
       <Card className="w-full max-w-2xl shadow-xl rounded-xl">
         <CardHeader className="flex flex-row items-center justify-between pb-4">
-          <CardTitle className="text-xl sm:text-2xl font-semibold">Time Entries for {format(displayDate, "PPP")}</CardTitle>
+          <CardTitle className="text-xl sm:text-2xl font-semibold">Volunteer Entries for {format(displayDate, "PPP")}</CardTitle>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -963,14 +962,14 @@ export default function Home() {
         <CardContent className="space-y-4">
           {userRole === 'owner' && (
             <div className="space-y-2">
-              <Label htmlFor="export-select">Select Employee to Export ({organizationDetails?.name} - {format(displayDate, "PPP")})</Label>
+              <Label htmlFor="export-select">Select Volunteer to Export ({organizationDetails?.name} - {format(displayDate, "PPP")})</Label>
               <Select value={selectedExportOption} onValueChange={setSelectedExportOption}>
                 <SelectTrigger id="export-select" className="w-full">
                   <SelectValue placeholder="Select an option" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL_EMPLOYEES_OPTION}>All Employees</SelectItem>
-                  {uniqueEmployeeNamesForExport.length > 0 ? uniqueEmployeeNamesForExport.map(empName => (
+                  <SelectItem value={ALL_VOLUNTEERS_OPTION}>All Volunteers</SelectItem>
+                  {uniqueVolunteerNamesForExport.length > 0 ? uniqueVolunteerNamesForExport.map(empName => (
                     <SelectItem key={empName} value={empName}>
                       {empName}
                     </SelectItem>
@@ -979,7 +978,7 @@ export default function Home() {
               </Select>
             </div>
           )}
-          {userRole === 'member' && ( <p className="text-sm text-muted-foreground">You can export your own time entries for {organizationDetails?.name} on {format(displayDate, "PPP")}.</p> )}
+          {userRole === 'member' && ( <p className="text-sm text-muted-foreground">You can export your own volunteer entries for {organizationDetails?.name} on {format(displayDate, "PPP")}.</p> )}
           <Button onClick={handleExport} variant="outline" className="w-full" disabled={exportDisabled}>
             <Download className="mr-2 h-5 w-5" /> Export to XLSX {userRole === 'member' ? `(My Entries)` : ''}
           </Button>
@@ -994,7 +993,7 @@ export default function Home() {
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This action cannot be undone. This will permanently delete 
-                  {userRole === 'member' ? ` your time log entries for ${format(displayDate, "PPP")} in "${organizationDetails?.name}"` : ` all time log entries for ${format(displayDate, "PPP")} in "${organizationDetails?.name}"`}
+                  {userRole === 'member' ? ` your volunteer log entries for ${format(displayDate, "PPP")} in "${organizationDetails?.name}"` : ` all volunteer log entries for ${format(displayDate, "PPP")} in "${organizationDetails?.name}"`}
                   from your browser&apos;s local storage.
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -1024,11 +1023,9 @@ export default function Home() {
           <Button onClick={handleReturnToOrgSelectionList} variant="outline" className="w-full">
             <Users className="mr-2 h-5 w-5" /> Switch or Manage Organizations
           </Button>
-          <p className="text-xs text-muted-foreground mt-2 text-center">This will take you back to the organization selection screen. Your current time logs for "{organizationDetails?.name}" are saved locally.</p>
+          <p className="text-xs text-muted-foreground mt-2 text-center">This will take you back to the organization selection screen. Your current volunteer logs for "{organizationDetails?.name}" are saved locally.</p>
         </CardContent>
       </Card>
     </main>
   );
 }
-
-    

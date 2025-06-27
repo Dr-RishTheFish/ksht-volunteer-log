@@ -64,12 +64,12 @@ export default function SignupPage() {
     <main className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col items-center justify-center p-4 sm:p-8 selection:bg-primary/20 selection:text-primary">
       <div className="mb-8">
         <Image 
-          src="/Stickers.png" 
-          alt="Big Brainbox Logo" 
+          src="/logo.png" 
+          alt="KSHT Logo" 
           width={100} 
           height={100} 
           className="rounded-full shadow-lg"
-          data-ai-hint="logo sticker"
+          data-ai-hint="temple logo"
           priority
         />
       </div>
@@ -79,7 +79,7 @@ export default function SignupPage() {
             <UserPlus className="h-7 w-7 text-primary" />
             Create an Account
           </CardTitle>
-          <CardDescription>Get started with Big Brainbox Time Clock.</CardDescription>
+          <CardDescription>Get started with KSHT Volunteer Log.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-6">
@@ -148,5 +148,3 @@ export default function SignupPage() {
     </main>
   );
 }
-
-    

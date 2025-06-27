@@ -5,8 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/contexts/AuthContext';
 
 export const metadata: Metadata = {
-  title: 'Big Brainbox Time Clock',
-  description: 'Track your work hours with ease.',
+  title: 'KSHT Volunteer Log',
+  description: 'Track your volunteer hours with ease.',
 };
 
 export default function RootLayout({

@@ -15,19 +15,19 @@ body {
     --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 3.9%;
-    --primary: 24 95% 53%; /* Vibrant Orange */
-    --primary-foreground: 0 0% 98%; /* Near White for contrast with Orange */
-    --secondary: 0 0% 96.1%;
+    --primary: 11 72% 53%; /* Logo Orange-Red */
+    --primary-foreground: 0 0% 98%; /* Near White for contrast */
+    --secondary: 42 89% 56%; /* Logo Yellow */
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96.1%;
     --muted-foreground: 0 0% 45.1%;
-    --accent: 260 85% 60%; /* Vibrant Purple */
-    --accent-foreground: 0 0% 98%; /* Near White for contrast with Purple */
+    --accent: 150 43% 34%; /* Logo Green */
+    --accent-foreground: 0 0% 98%; /* Near White for contrast */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 89.8%;
     --input: 0 0% 89.8%;
-    --ring: 24 95% 53%; /* Ring color to match primary */
+    --ring: 11 72% 53%; /* Ring color to match primary */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -50,19 +50,19 @@ body {
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 3.9%;
     --popover-foreground: 0 0% 98%;
-    --primary: 24 95% 53%; /* Vibrant Orange */
+    --primary: 11 72% 53%; /* Logo Orange-Red */
     --primary-foreground: 0 0% 98%; 
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 42 89% 56%; /* Logo Yellow */
+    --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 14.9%;
     --muted-foreground: 0 0% 63.9%;
-    --accent: 260 85% 60%; /* Vibrant Purple */
+    --accent: 150 43% 40%; /* Logo Green (lightened for dark mode) */
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
-    --ring: 24 95% 53%; /* Ring color to match primary */
+    --ring: 11 72% 53%; /* Ring color to match primary */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
