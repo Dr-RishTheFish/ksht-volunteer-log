@@ -21,7 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createOrganization, getUserAssociatedOrganizations, deleteOrganization, getOrganizationMembers } from '@/lib/firebase/firestoreService';
+import { createOrganization, getUserAssociatedOrganizations, deleteOrganization, getOrganizationMembers, joinOrganization } from '@/lib/firebase/firestoreService';
 import type { Organization } from '@/interfaces/Organization';
 import type { UserProfile } from '@/interfaces/User';
 
@@ -56,6 +56,11 @@ function OrganizationHub() {
   const [displayDate, setDisplayDate] = useState<Date | undefined>();
   const [selectedExportOption, setSelectedExportOption] = useState<string>("__ALL_VOLUNTEERS__");
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  
+  // States for create/join org forms
+  const [newOrgName, setNewOrgName] = useState('');
+  const [joinInviteCode, setJoinInviteCode] = useState('');
+  const [isSubmittingOrgAction, setIsSubmittingOrgAction] = useState(false);
 
 
   // Initial auth check and routing
@@ -68,23 +73,26 @@ function OrganizationHub() {
     }
   }, [user, authLoading, router]);
 
+  const fetchUserOrgs = async () => {
+    if (!user) return;
+    setIsLoadingUserAssociatedOrgs(true);
+    try {
+        const orgs = await getUserAssociatedOrganizations(user.uid);
+        setUserAssociatedOrgs(orgs);
+    } catch (error) {
+        console.error("Error fetching user organizations:", error);
+        toast({ title: "Error", description: "Could not fetch your organizations.", variant: "destructive" });
+    } finally {
+        setIsLoadingUserAssociatedOrgs(false);
+    }
+  };
+
   // Fetch associated organizations when in org selection view
   useEffect(() => {
     if (componentState === 'orgSelection' && user) {
-      setIsLoadingUserAssociatedOrgs(true);
-      getUserAssociatedOrganizations(user.uid)
-        .then(orgs => {
-          setUserAssociatedOrgs(orgs);
-        })
-        .catch(error => {
-          console.error("Error fetching user organizations:", error);
-          toast({ title: "Error", description: "Could not fetch your organizations.", variant: "destructive" });
-        })
-        .finally(() => {
-          setIsLoadingUserAssociatedOrgs(false);
-        });
+      fetchUserOrgs();
     }
-  }, [componentState, user, toast]);
+  }, [componentState, user]);
 
   // Date/Time ticker
   useEffect(() => {
@@ -186,6 +194,50 @@ function OrganizationHub() {
     setSelectedOrganization(null);
     setUserRoleInSelectedOrg(null);
     setTimeLogs([]);
+  };
+
+  const handleCreateOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !newOrgName.trim()) {
+        toast({ title: 'Error', description: 'Organization name cannot be empty.', variant: 'destructive' });
+        return;
+    }
+    setIsSubmittingOrgAction(true);
+    try {
+        await createOrganization(user.uid, newOrgName.trim());
+        toast({ title: "Success", description: "Organization created successfully." });
+        await fetchUserOrgs();
+        setNewOrgName('');
+        setOrgSelectionSubView('list');
+    } catch (error) {
+        toast({ title: "Error", description: "Failed to create organization.", variant: "destructive" });
+    } finally {
+        setIsSubmittingOrgAction(false);
+    }
+  };
+  
+  const handleJoinOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !joinInviteCode.trim()) {
+        toast({ title: 'Error', description: 'Invite code cannot be empty.', variant: 'destructive' });
+        return;
+    }
+    setIsSubmittingOrgAction(true);
+    try {
+        const joinedOrg = await joinOrganization(user.uid, joinInviteCode.trim());
+        if (joinedOrg) {
+            toast({ title: "Success", description: `Successfully joined "${joinedOrg.name}".` });
+            await fetchUserOrgs();
+            setJoinInviteCode('');
+            setOrgSelectionSubView('list');
+        } else {
+            toast({ title: "Error", description: "Invalid invite code or already a member.", variant: "destructive" });
+        }
+    } catch (error) {
+        toast({ title: "Error", description: "Failed to join organization.", variant: "destructive" });
+    } finally {
+        setIsSubmittingOrgAction(false);
+    }
   };
 
   // --- MemberView specific logic ---
@@ -341,22 +393,26 @@ function OrganizationHub() {
         <Card className="w-full max-w-4xl">
           <CardHeader>
             <CardTitle className="text-2xl sm:text-3xl">Organization Hub</CardTitle>
-            <CardDescription>Select an organization to manage, or create/join a new one.</CardDescription>
+            <CardDescription>
+                {orgSelectionSubView === 'list' && "Select an organization to manage, or create/join a new one."}
+                {orgSelectionSubView === 'createForm' && "Enter a name for your new organization."}
+                {orgSelectionSubView === 'joinForm' && "Enter an invite code to join an organization."}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingUserAssociatedOrgs ? (
               <div className="flex justify-center items-center h-40">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
-            ) : (
+            ) : orgSelectionSubView === 'list' ? (
               <>
                 {userAssociatedOrgs.length > 0 && (
                   <div className="mb-8">
                     <h3 className="text-lg font-semibold mb-4 border-b pb-2">Your Organizations</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {userAssociatedOrgs.map(org => (
-                        <Card key={org.id} className="hover:shadow-lg transition-shadow cursor-pointer flex flex-col">
-                          <div className="flex-grow" onClick={() => handleSelectOrganization(org)}>
+                        <Card key={org.id} className="hover:shadow-lg transition-shadow flex flex-col">
+                           <div className="flex-grow cursor-pointer" onClick={() => handleSelectOrganization(org)}>
                             <CardHeader>
                               <CardTitle>{org.name}</CardTitle>
                               <CardDescription>
@@ -377,7 +433,7 @@ function OrganizationHub() {
                                   <DropdownMenuItem onClick={() => handleCopyInviteLink(org.inviteCode)}>
                                     <Copy className="mr-2 h-4 w-4" /> Copy Invite Link
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleDeleteOrgClick(org)} className="text-destructive">
+                                  <DropdownMenuItem onClick={() => handleDeleteOrgClick(org)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                                     <Trash2 className="mr-2 h-4 w-4" /> Delete Organization
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -390,14 +446,42 @@ function OrganizationHub() {
                   </div>
                 )}
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-4 pt-4 border-t">
-                  <Button onClick={() => router.push('/signup?action=create_org')} size="lg">
+                  <Button onClick={() => setOrgSelectionSubView('createForm')} size="lg">
                     <PlusCircle className="mr-2 h-5 w-5" /> Create New Organization
                   </Button>
-                  <Button onClick={() => router.push('/signup?action=join_org')} variant="outline" size="lg">
+                  <Button onClick={() => setOrgSelectionSubView('joinForm')} variant="outline" size="lg">
                     <Users className="mr-2 h-5 w-5" /> Join with Invite Code
                   </Button>
                 </div>
               </>
+            ) : orgSelectionSubView === 'createForm' ? (
+              <form onSubmit={handleCreateOrg} className="space-y-4 max-w-sm mx-auto">
+                <div className="space-y-2">
+                    <Label htmlFor="newOrgName">New Organization Name</Label>
+                    <Input id="newOrgName" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} required disabled={isSubmittingOrgAction} />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <Button type="button" variant="outline" onClick={() => setOrgSelectionSubView('list')} disabled={isSubmittingOrgAction}>Cancel</Button>
+                    <Button type="submit" className="flex-grow" disabled={isSubmittingOrgAction}>
+                        {isSubmittingOrgAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Create
+                    </Button>
+                </div>
+              </form>
+            ) : ( // joinForm
+              <form onSubmit={handleJoinOrg} className="space-y-4 max-w-sm mx-auto">
+                 <div className="space-y-2">
+                    <Label htmlFor="joinInviteCode">Invite Code</Label>
+                    <Input id="joinInviteCode" value={joinInviteCode} onChange={(e) => setJoinInviteCode(e.target.value)} required disabled={isSubmittingOrgAction} />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <Button type="button" variant="outline" onClick={() => setOrgSelectionSubView('list')} disabled={isSubmittingOrgAction}>Cancel</Button>
+                    <Button type="submit" className="flex-grow" disabled={isSubmittingOrgAction}>
+                        {isSubmittingOrgAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Join
+                    </Button>
+                </div>
+              </form>
             )}
           </CardContent>
         </Card>
@@ -496,10 +580,10 @@ function OrganizationHub() {
         )}
 
         <Card className="w-full max-w-4xl shadow-xl rounded-xl">
-          <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 gap-4">
             <CardTitle className="text-xl sm:text-2xl font-semibold">Volunteer Entries for {displayDate ? format(displayDate, "PPP") : '...'}</CardTitle>
             <Popover>
-              <PopoverTrigger asChild><Button variant={"outline"}><CalendarIcon className="mr-2 h-4 w-4" /><span>Change Date</span></Button></PopoverTrigger>
+              <PopoverTrigger asChild><Button variant={"outline"} className="w-full sm:w-auto"><CalendarIcon className="mr-2 h-4 w-4" /><span>Change Date</span></Button></PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end"><Calendar mode="single" selected={displayDate} onSelect={(date) => {if (date) setDisplayDate(date);}} disabled={(date) => date > new Date()} initialFocus /></PopoverContent>
             </Popover>
           </CardHeader>
@@ -551,3 +635,5 @@ export default function HomePage() {
     </Suspense>
   )
 }
+
+    
