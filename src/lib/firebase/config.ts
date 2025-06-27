@@ -29,17 +29,9 @@ if (typeof window !== "undefined" && !getApps().length) {
     db = getFirestore(app);
   }
 } else {
-  app = getApps()[0]; // Use existing app
-  if (app) {
-    auth = getAuth(app);
-    db = getFirestore(app);
-  } else {
-    // This case handles server-side rendering or when init has already run
-    // It's a bit of a dance to avoid re-initialization errors with Next.js
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-  }
+  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
 }
 
 // A check to ensure config is loaded client-side
