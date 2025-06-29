@@ -57,13 +57,11 @@ function OrganizationHub() {
   const [selectedExportOption, setSelectedExportOption] = useState<string>("__ALL_VOLUNTEERS__");
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   
-  // States for create/join org forms
   const [newOrgName, setNewOrgName] = useState('');
   const [joinInviteCode, setJoinInviteCode] = useState('');
   const [isSubmittingOrgAction, setIsSubmittingOrgAction] = useState(false);
 
 
-  // Initial auth check and routing
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -87,20 +85,17 @@ function OrganizationHub() {
     }
   };
 
-  // Fetch associated organizations when in org selection view
   useEffect(() => {
     if (componentState === 'orgSelection' && user) {
       fetchUserOrgs();
     }
   }, [componentState, user]);
 
-  // Date/Time ticker
   useEffect(() => {
     const timer = setInterval(() => setCurrentDateTime(format(new Date(), 'MM/dd/yyyy - hh:mm:ss a')), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch members when an org is selected and user is owner
   useEffect(() => {
     if (selectedOrganization && userRoleInSelectedOrg === 'owner') {
       getOrganizationMembers(selectedOrganization.id)
@@ -117,7 +112,6 @@ function OrganizationHub() {
     }
   }, [selectedOrganization, userRoleInSelectedOrg, toast]);
 
-  // Load/save time logs from/to localStorage when selectedOrganization changes
   useEffect(() => {
     if (!selectedOrganization) {
       setTimeLogs([]);
@@ -148,7 +142,6 @@ function OrganizationHub() {
     }
   }, [timeLogs, selectedOrganization]);
 
-  // Date initialization for client-side only
   useEffect(() => {
     const today = new Date();
     setDisplayDate(today);
@@ -240,7 +233,6 @@ function OrganizationHub() {
     }
   };
 
-  // --- MemberView specific logic ---
   const currentUserName = user?.displayName || user?.email || 'Current User';
 
   const isCurrentUserClockedIn = useMemo(() => {
@@ -635,5 +627,3 @@ export default function HomePage() {
     </Suspense>
   )
 }
-
-    
