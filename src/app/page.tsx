@@ -16,7 +16,7 @@ import { TimeLogTable } from '@/components/TimeLogTable';
 import * as XLSX from 'xlsx';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
@@ -92,6 +92,24 @@ function OrganizationHub() {
   }, [componentState, user]);
 
   useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    const fetchOrgDetails = async () => {
+      if (selectedOrganization && userRoleInSelectedOrg === 'owner') {
+        try {
+          // Assuming getOrganizationDetails fetches the full organization object including inviteCode
+          // This function needs to be implemented or retrieved from firestoreService.ts
+          // For now, we'll just update the selectedOrganization state with itself to trigger re-render if needed
+          // If getOrganizationDetails is implemented and updates the inviteCode, the state will reflect it.
+           const updatedOrg = await getOrganizationDetails(selectedOrganization.id);
+           setSelectedOrganization(updatedOrg);
+        } catch (error) {
+          console.error("Error fetching organization details:", error);
+        }
+      }
+    };
+    if (selectedOrganization && userRoleInSelectedOrg === 'owner') {
+      intervalId = setInterval(fetchOrgDetails, 30000); // Refresh every 30 seconds
+    }
     const timer = setInterval(() => setCurrentDateTime(format(new Date(), 'MM/dd/yyyy - hh:mm:ss a')), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -159,7 +177,10 @@ function OrganizationHub() {
     const url = `${window.location.origin}/signup?inviteCode=${inviteCode}`;
     navigator.clipboard.writeText(url)
       .then(() => toast({ title: "Copied!", description: "Invite link copied to clipboard." }))
-      .catch(() => toast({ title: "Error", description: "Could not copy invite link.", variant: "destructive" }));
+      .catch((error) => {
+ console.error("Error copying invite link:", error); // Log the error object
+ toast({ title: "Error", description: "Could not copy invite link.", variant: "destructive" });
+ });
   };
 
   const handleDeleteOrgClick = (org: Organization) => {
@@ -522,8 +543,16 @@ function OrganizationHub() {
               <Button onClick={handleClockOut} disabled={!currentUserName.trim() || !isCurrentUserClockedIn} size="lg" className="bg-accent hover:bg-accent/90"><ArrowLeftToLine className="mr-2 h-5 w-5" /> Clock Out</Button>
             </div>
           </CardContent>
+           {userRoleInSelectedOrg === 'owner' && selectedOrganization?.inviteCode && (
+            <CardFooter className="flex justify-center">
+              <div className="p-3 bg-green-100 dark:bg-green-800/50 rounded-md inline-flex items-center gap-2 text-green-800 dark:text-green-200 font-semibold text-lg">
+                 <Info className="h-5 w-5" />
+                 Invite Code: <span className="font-mono">{selectedOrganization.inviteCode}</span>
+                 <Button variant="ghost" size="sm" onClick={() => handleCopyInviteLink(selectedOrganization.inviteCode)}><Copy className="h-4 w-4" /><span className="sr-only">Copy Invite Code</span></Button>
+              </div>
+            </CardFooter>
+          )}
         </Card>
-
         {userRoleInSelectedOrg === 'owner' && (
           <Card className="w-full max-w-2xl shadow-xl rounded-xl">
             <CardHeader>
